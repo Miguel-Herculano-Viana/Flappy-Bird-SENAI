@@ -31,8 +31,9 @@ class Placar:
 
     # MÉTODOS
 
-    def marcar_ponto(self):
-        self.pontos += 1  # Soma um ponto
+    # "quantidade=1" é um PARÂMETRO COM VALOR PADRÃO: se ninguém disser quantos pontos, vale 1.
+    def marcar_ponto(self, quantidade=1):
+        self.pontos += quantidade  # Soma os pontos
 
     # Chamado quando o jogador perde: se fez mais pontos que o recorde, guarda o novo recorde.
     def registrar_fim_de_jogo(self):

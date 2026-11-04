@@ -69,7 +69,8 @@ class Painel:
             medidor.atualizar(tempo_real)
 
     # Desenha o painel no monitor. Se tiver um "editor" aberto, ele aparece em cima.
-    def desenhar(self, monitor, editor=None):
+    # "mensagem" (uma lista de linhas) troca a explicação normal quando o editor está fechado.
+    def desenhar(self, monitor, editor=None, mensagem=None):
         pygame.draw.rect(monitor, COR_DO_FUNDO_DO_PAINEL, self.retangulo, border_radius=self.margem // 2)  # Fundo com cantos arredondados
         barra_de_titulo = pygame.Rect(self.retangulo.x, self.retangulo.y, self.retangulo.width, self.altura_da_linha * 3 // 2)  # Faixa no topo
         pygame.draw.rect(monitor, COR_DA_BARRA_DE_TITULO, barra_de_titulo, border_top_left_radius=self.margem // 2, border_top_right_radius=self.margem // 2)  # Só os cantos de cima arredondados
@@ -78,10 +79,10 @@ class Painel:
         topo_do_conteudo = barra_de_titulo.bottom + self.margem
         if editor:  # Tem um desafio: o editor ocupa a parte de cima
             editor.desenhar(monitor, self, topo_do_conteudo)
-        else:  # Sem desafio: só uma explicação
-            self.escrever(monitor, "# Voe com ESPAÇO.", COR_DE_COMENTARIO, topo_do_conteudo)
-            self.escrever(monitor, "# Quando aparecer um desafio, aperte ENTER", COR_DE_COMENTARIO, topo_do_conteudo + self.altura_da_linha)
-            self.escrever(monitor, "# e mude o jogo com código!", COR_DE_COMENTARIO, topo_do_conteudo + 2 * self.altura_da_linha)
+        else:  # Sem editor: uma explicação (ou a mensagem recebida)
+            linhas = mensagem or ["Voe com ESPAÇO.", "Quando aparecer um desafio, aperte ENTER", "e mude o jogo com código!"]
+            for numero_da_linha, linha in enumerate(linhas):
+                self.escrever(monitor, "# " + linha, COR_DE_COMENTARIO, topo_do_conteudo + numero_da_linha * self.altura_da_linha)
         self.desenhar_medidores(monitor)
 
     # Desenha os medidores no pé do painel: uma linha de código e uma barra para cada atributo.

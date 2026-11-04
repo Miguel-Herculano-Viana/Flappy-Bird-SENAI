@@ -81,7 +81,7 @@ class EditorDeCodigo:
     #   minimo, maximo     -> faixa de valores permitida
     #   codigo_pronto      -> o começo da linha que já vem escrito (ex.: "canos.abertura = ")
     #   comentarios        -> linhas de explicação mostradas acima do código
-    #   segundos           -> tempo que o visitante tem para acertar
+    #   segundos           -> tempo que o visitante tem para acertar (None = sem limite, usado no tutorial)
     def __init__(self, objeto, atributo, minimo, maximo, codigo_pronto, comentarios, segundos):
         # ATRIBUTOS
         self.objeto = objeto
@@ -135,6 +135,7 @@ class EditorDeCodigo:
         else:
             return  # Não é teclado: nada mudou
         self.tempo_do_cursor = 0.0  # Mexeu no texto: o cursor aparece na hora (não some no meio de uma piscada)
+        self.mensagem_de_erro = None  # Mexeu no texto: o erro antigo já não vale para a linha nova
         self.valor_da_previa, _ = conferir_linha(self.linha_completa(), self.objeto, self.atributo, self.minimo, self.maximo)  # Prévia ao vivo
 
     # O visitante apertou ENTER: confere a linha.
@@ -142,7 +143,8 @@ class EditorDeCodigo:
         valor, erro = conferir_linha(self.linha_completa(), self.objeto, self.atributo, self.minimo, self.maximo)
         if erro:  # Errou: mostra o erro e perde um pouco de tempo
             self.mensagem_de_erro = erro
-            self.segundos_restantes -= SEGUNDOS_PERDIDOS_POR_ERRO
+            if self.segundos_totais is not None:  # Só perde tempo se tiver limite
+                self.segundos_restantes -= SEGUNDOS_PERDIDOS_POR_ERRO
         else:  # Acertou!
             self.mensagem_de_erro = None
             self.valor_aceito = valor
@@ -150,11 +152,11 @@ class EditorDeCodigo:
     # Chamado a cada quadro com o tempo REAL (a câmera lenta não deixa o relógio do editor mais lento).
     def atualizar(self, tempo_real):
         self.tempo_do_cursor += tempo_real
-        if self.valor_aceito is None:  # Depois de acertar, o relógio para
+        if self.valor_aceito is None and self.segundos_totais is not None:  # Depois de acertar (ou sem limite), o relógio para
             self.segundos_restantes -= tempo_real
 
     def acabou_o_tempo(self):
-        return self.segundos_restantes <= 0 and self.valor_aceito is None
+        return self.segundos_totais is not None and self.segundos_restantes <= 0 and self.valor_aceito is None
 
     # Desenha o editor dentro do painel, começando na altura "topo". Usa a fonte e o tamanho de linha do painel.
     def desenhar(self, monitor, painel, topo):
@@ -190,6 +192,8 @@ class EditorDeCodigo:
         y = max(y + altura, topo + altura * (len(self.comentarios) + 6))
 
         # Barra de tempo: encolhe conforme o tempo passa
+        if self.segundos_totais is None:  # Sem limite de tempo: não tem barra
+            return
         largura_total = painel.retangulo.width - 2 * painel.margem
         fracao = max(0.0, self.segundos_restantes / self.segundos_totais)
         pygame.draw.rect(monitor, COR_DO_FUNDO_DA_BARRA, (esquerda, y, largura_total, altura // 3), border_radius=4)
@@ -238,4 +242,8 @@ if __name__ == "__main__":
     assert editor.valor_aceito == 80 and editor.mensagem_de_erro is None
     editor.atualizar(100)  # Depois de acertar, o tempo não acaba
     assert not editor.acabou_o_tempo()
+    sem_limite = EditorDeCodigo("canos", "abertura", 56, 96, "canos.abertura = ", [], None)  # Tutorial: sem limite de tempo
+    sem_limite.atualizar(100)
+    sem_limite.rodar()  # Erro (linha vazia) também não desconta tempo
+    assert not sem_limite.acabou_o_tempo()
     print("editor.py: tudo certo!")

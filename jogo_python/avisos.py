@@ -13,6 +13,17 @@ TRANSPARENCIA_DO_FUNDO = 210  # 0 = invisível, 255 = opaco
 DISTANCIA_DO_TOPO = 0.12  # O primeiro aviso fica a 12% da altura do jogo, abaixo dos pontos
 
 
+# Monta uma caixa escura com borda colorida e o texto dentro. Usada pelos avisos e pelas dicas dos desafios.
+def criar_caixa(texto, cor, fonte):
+    imagem_do_texto = fonte.render(texto, True, cor)  # Transforma o texto em imagem
+    margem = fonte.get_height() // 3  # Espaço entre o texto e a borda da caixa
+    caixa = pygame.Surface((imagem_do_texto.get_width() + 2 * margem, imagem_do_texto.get_height() + 2 * margem), pygame.SRCALPHA)  # Caixa com transparência
+    pygame.draw.rect(caixa, (*COR_DO_FUNDO_DO_AVISO, TRANSPARENCIA_DO_FUNDO), caixa.get_rect(), border_radius=margem)  # Fundo escuro arredondado
+    pygame.draw.rect(caixa, cor, caixa.get_rect(), width=max(2, margem // 4), border_radius=margem)  # Borda na cor do aviso
+    caixa.blit(imagem_do_texto, (margem, margem))  # Texto dentro da caixa
+    return caixa
+
+
 class Aviso:
 
     # CONSTRUTOR: o texto e a cor do aviso. "segundos" muda quanto tempo ele fica na tela.
@@ -34,12 +45,8 @@ class Aviso:
 
     # Desenha o aviso dentro da área do jogo no monitor. "posicao_na_fila" empilha vários avisos um embaixo do outro.
     def desenhar(self, monitor, area_do_jogo, fonte, posicao_na_fila):
-        imagem_do_texto = fonte.render(self.texto, True, self.cor)  # Transforma o texto em imagem
-        margem = fonte.get_height() // 3  # Espaço entre o texto e a borda da caixa
-        caixa = pygame.Surface((imagem_do_texto.get_width() + 2 * margem, imagem_do_texto.get_height() + 2 * margem), pygame.SRCALPHA)  # Caixa com transparência
-        pygame.draw.rect(caixa, (*COR_DO_FUNDO_DO_AVISO, TRANSPARENCIA_DO_FUNDO), caixa.get_rect(), border_radius=margem)  # Fundo escuro arredondado
-        pygame.draw.rect(caixa, self.cor, caixa.get_rect(), width=max(2, margem // 4), border_radius=margem)  # Borda na cor do aviso
-        caixa.blit(imagem_do_texto, (margem, margem))  # Texto dentro da caixa
+        caixa = criar_caixa(self.texto, self.cor, fonte)  # Monta a caixa com o texto
+        margem = fonte.get_height() // 3  # Espaço entre um aviso e outro
 
         # ENTRADA: nos primeiros instantes, a caixa desce de cima. "1 - (1 - x)²" começa rápido e freia no fim.
         progresso_da_entrada = min(1.0, self.idade / SEGUNDOS_PARA_ENTRAR)  # Vai de 0 até 1

@@ -8,6 +8,7 @@ import pygame  # Biblioteca de jogos que estamos usando
 from avisos import Aviso  # Importa a CLASSE Aviso do arquivo avisos.py
 from cano import VELOCIDADE_DO_CENARIO, Cano  # Importa a CLASSE Cano (e a velocidade dos canos) do arquivo cano.py
 from chao import Chao  # Importa a CLASSE Chao do arquivo chao.py
+from desafios import GerenciadorDeDesafios  # Importa a CLASSE que comanda os desafios de código
 from painel import Painel  # Importa a CLASSE Painel do arquivo painel.py
 from passaro import Passaro  # Importa a CLASSE Passaro do arquivo passaro.py
 from placar import Placar  # Importa a CLASSE Placar do arquivo placar.py
@@ -65,6 +66,7 @@ placar_do_jogo = Placar()  # Cria um OBJETO a partir da classe Placar
 chao_do_jogo = Chao(LARGURA_DA_TELA, ALTURA_DO_CHAO, TOPO_DO_CHAO)  # Cria um OBJETO a partir da classe Chao
 todos_os_canos = pygame.sprite.Group()  # Grupo só com os canos, para testar a batida do pássaro
 todos_os_objetos_do_jogo = pygame.sprite.Group(passaro_do_jogador)  # Grupo que atualiza e desenha o pássaro e os canos
+gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo)  # Cria o OBJETO que decide quando aparecem os desafios de código
 
 # O jogo está sempre em UMA destas três situações (estados):
 #   "inicio"   -> tela de início, o pássaro fica parado batendo as asas esperando o jogador
@@ -74,14 +76,29 @@ estado_do_jogo = "inicio"  # Todo jogo começa na tela de início
 jogo_esta_rodando = True  # Enquanto for True, a janela continua aberta
 momento_em_que_o_jogo_acabou = 0  # Em que milissegundo o jogador perdeu (para contar a pausa antes de recomeçar)
 distancia_desde_o_ultimo_cano = 0.0  # Quantos pixels o cenário andou desde o último par de canos
-escala_do_tempo = ESCALA_DO_TEMPO_NORMAL  # Multiplica o tempo do jogo: abaixo de 1 é câmera lenta, 0 é pausa
 while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
     tempo_do_quadro = relogio.tick(QUADROS_POR_SEGUNDO) / 1000  # Segundos REAIS que passaram desde o último quadro
+    if estado_do_jogo == "jogando":  # Durante a partida, os desafios decidem a velocidade (câmera lenta ou pausa no tutorial)
+        escala_do_tempo = gerenciador_de_desafios.escala_do_tempo()
+    else:
+        escala_do_tempo = ESCALA_DO_TEMPO_NORMAL
     tempo_do_jogo = tempo_do_quadro * escala_do_tempo  # Segundos que passaram DENTRO do jogo (em câmera lenta, passa menos tempo)
 
     for evento in pygame.event.get():  # Verifica tudo que aconteceu (teclas, cliques, fechar a janela, nosso evento)
+        if evento.type == pygame.QUIT:  # Clicou no X da janela?
+            jogo_esta_rodando = False
+        # EDITOR ABERTO: o teclado é todo do editor (o espaço vira letra, não pulo). O mouse continua pulando.
+        if estado_do_jogo == "jogando" and gerenciador_de_desafios.editor_recebe_teclado() and evento.type in (pygame.KEYDOWN, pygame.TEXTINPUT):
+            if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:  # ESC fecha o editor (e não o jogo)
+                gerenciador_de_desafios.fechar_editor()
+            else:
+                gerenciador_de_desafios.tratar_evento(evento)  # Letras, apagar, setas, ENTER...
+            continue  # "continue" pula o resto do laço e vai para o próximo evento
+        apertou_enter = evento.type == pygame.KEYDOWN and evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER)  # ENTER do teclado ou do teclado numérico
+        if apertou_enter and estado_do_jogo == "jogando":  # ENTER abre o editor, se tiver um desafio
+            gerenciador_de_desafios.apertou_enter()
         apertou_esc = evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE  # Em tela cheia não tem o X da janela, então o ESC fecha o jogo
-        if evento.type == pygame.QUIT or apertou_esc:  # Fechou a janela ou apertou ESC?
+        if apertou_esc:  # Apertou ESC (com o editor fechado)?
             jogo_esta_rodando = False  # Então sai do laço e o jogo termina
         apertou_espaco = evento.type == pygame.KEYDOWN and evento.key == pygame.K_SPACE  # Apertou a barra de espaço?
         clicou_com_botao_esquerdo = evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1  # Clicou com o botão esquerdo?
@@ -98,6 +115,7 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
                 passaro_do_jogador = Passaro(POSICAO_INICIAL_DO_PASSARO)  # Cria um pássaro NOVO, com os atributos do começo
                 todos_os_objetos_do_jogo.add(passaro_do_jogador)  # Coloca o pássaro novo no grupo geral
                 placar_do_jogo = Placar()  # Cria um placar NOVO: pontos voltam a zero e o recorde é lido do arquivo
+                gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo)  # Desafios do zero: o próximo visitante vê os tutoriais
                 estado_do_jogo = "inicio"  # Volta para a tela de início
 
     if estado_do_jogo == "inicio":  # Na tela de início, o pássaro só bate as asas, sem cair
@@ -116,12 +134,15 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
             novos_canos = criar_par_de_canos(LARGURA_DA_TELA - distancia_desde_o_ultimo_cano)  # Desconta o que passou, para o espaço entre os pares ficar sempre igual
             todos_os_canos.add(novos_canos)  # Coloca no grupo dos canos (para a batida)
             todos_os_objetos_do_jogo.add(novos_canos)  # E no grupo geral (para mover e desenhar)
+            gerenciador_de_desafios.novo_par_criado(novos_canos, passaro_do_jogador)  # Avisa o gerenciador: este par pode virar um desafio
 
         for cano in todos_os_canos:  # Olha cada cano que está na tela
             cano.animar(tempo_do_quadro)  # Desliza a borda e o deslocamento até o alvo (no tempo REAL, para ver o resultado na hora)
             if cano.vale_ponto and cano.rect.right < passaro_do_jogador.rect.centerx:  # O cano já ficou para trás do pássaro?
                 placar_do_jogo.marcar_ponto()  # Ganha um ponto
                 cano.vale_ponto = False  # Este cano já foi contado, não vale ponto de novo
+
+        gerenciador_de_desafios.atualizar(tempo_do_quadro, passaro_do_jogador)  # Editor, tutorial, avisos (no tempo REAL)
 
         passaro_bateu_em_um_cano = pygame.sprite.spritecollideany(passaro_do_jogador, todos_os_canos, pygame.sprite.collide_mask)  # Só conta se os pixels desenhados se tocarem
         passaro_bateu_no_chao = pygame.sprite.collide_mask(passaro_do_jogador, chao_do_jogo)  # Mesmo teste, mas com o chão
@@ -143,20 +164,24 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         placar_do_jogo.desenhar_fim_de_jogo(tela)  # A tela de fim de jogo por cima da cena congelada
 
     # MEDIDORES: o painel mostra os atributos que o visitante pode mudar com código, sempre com o valor de agora.
-    painel_de_codigo.mostrar_valor("canos.abertura", TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS, maximo_da_barra=120)
+    painel_de_codigo.mostrar_valor("canos.abertura", gerenciador_de_desafios.valor_para_o_medidor("canos.abertura", passaro_do_jogador, TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS), maximo_da_barra=120)
     painel_de_codigo.mostrar_valor("canos.distancia", DISTANCIA_ENTRE_OS_CANOS, maximo_da_barra=150)
     painel_de_codigo.mostrar_valor("passaro.forca_da_gravidade", passaro_do_jogador.forca_da_gravidade, maximo_da_barra=1000)
     painel_de_codigo.mostrar_valor("passaro.forca_do_pulo", passaro_do_jogador.forca_do_pulo, maximo_da_barra=250)
     painel_de_codigo.atualizar(tempo_do_quadro)  # Anima as barras (no tempo real)
     for aviso in avisos_na_tela:  # Anima os avisos (no tempo real)
         aviso.atualizar(tempo_do_quadro)
-    avisos_na_tela = [aviso for aviso in avisos_na_tela if not aviso.acabou()]  # Tira da lista os avisos que já sumiram
+    avisos_na_tela[:] = [aviso for aviso in avisos_na_tela if not aviso.acabou()]  # Tira da lista os avisos que já sumiram ("[:]" troca o conteúdo da MESMA lista, que o gerenciador também usa)
 
     monitor.fill(COR_EM_VOLTA_DO_JOGO)  # Pinta o monitor inteiro, apagando o quadro anterior
     pygame.transform.scale(tela, tamanho_do_jogo_no_monitor, monitor.subsurface(area_do_jogo_no_monitor))  # Amplia o jogo pequeno direto no lugar dele no monitor
     for posicao_na_fila, aviso in enumerate(avisos_na_tela):  # Avisos por cima do jogo, um embaixo do outro
         aviso.desenhar(monitor, area_do_jogo_no_monitor, fonte_dos_avisos, posicao_na_fila)
-    painel_de_codigo.desenhar(monitor)  # O painel é desenhado na resolução do monitor, por isso o texto fica nítido
+    if estado_do_jogo == "jogando":
+        gerenciador_de_desafios.desenhar_no_jogo(monitor, area_do_jogo_no_monitor, fator_de_ampliacao, fonte_dos_avisos)  # Destaque do problema, dica de ENTER, prévia
+    editor_visivel = gerenciador_de_desafios.editor_para_mostrar() if estado_do_jogo == "jogando" else None  # O editor só aparece durante a partida
+    mensagem_do_painel = gerenciador_de_desafios.mensagem_do_painel() if estado_do_jogo == "jogando" else None  # Ex.: "Aperte ENTER para programar"
+    painel_de_codigo.desenhar(monitor, editor_visivel, mensagem_do_painel)  # O painel é desenhado na resolução do monitor, por isso o texto fica nítido
     pygame.display.flip()  # Mostra na tela tudo que foi desenhado
 
 pygame.quit()  # Desliga o pygame
