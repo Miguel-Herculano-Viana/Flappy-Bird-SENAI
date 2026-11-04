@@ -114,6 +114,7 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
             todos_os_objetos_do_jogo.add(novos_canos)  # E no grupo geral (para mover e desenhar)
 
         for cano in todos_os_canos:  # Olha cada cano que está na tela
+            cano.animar(tempo_do_quadro)  # Desliza a borda e o deslocamento até o alvo (no tempo REAL, para ver o resultado na hora)
             if cano.vale_ponto and cano.rect.right < passaro_do_jogador.rect.centerx:  # O cano já ficou para trás do pássaro?
                 placar_do_jogo.marcar_ponto()  # Ganha um ponto
                 cano.vale_ponto = False  # Este cano já foi contado, não vale ponto de novo
