@@ -7,10 +7,11 @@ import pygame  # Biblioteca de jogos que estamos usando
 
 from cano import Cano  # Importa a CLASSE Cano do arquivo cano.py
 from chao import Chao  # Importa a CLASSE Chao do arquivo chao.py
+from painel import Painel  # Importa a CLASSE Painel do arquivo painel.py
 from passaro import Passaro  # Importa a CLASSE Passaro do arquivo passaro.py
 from placar import Placar  # Importa a CLASSE Placar do arquivo placar.py
 
-LARGURA_DA_TELA = 144  # Largura do jogo em pixels (o pygame amplia para caber no monitor)
+LARGURA_DA_TELA = 144  # Largura do jogo em pixels (depois ampliamos para caber no monitor)
 ALTURA_DA_TELA = 256  # Altura do jogo em pixels
 ALTURA_DO_CHAO = 32  # Altura da faixa de chão no pé da tela
 TOPO_DO_CHAO = ALTURA_DA_TELA - ALTURA_DO_CHAO  # Altura da tela onde o chão começa
@@ -21,6 +22,9 @@ TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS = 64  # Altura do espaço por onde o pássaro
 DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA = 48  # Para a abertura não ficar colada no topo ou no chão
 MILISSEGUNDOS_CANOS = 1500  # Um novo par de canos aparece a cada 1,5 segundo
 MILISSEGUNDOS_DE_ESPERA_PARA_RECOMECAR = 600  # Pausa no fim de jogo, para quem está apertando espaço sem parar conseguir ver o resultado
+MARGEM_DO_PAINEL = 32  # Espaço em pixels do monitor entre o jogo, o painel de código e a borda
+LARGURA_MAXIMA_DO_PAINEL = 900  # Em monitores muito largos o painel não passa disso
+COR_EM_VOLTA_DO_JOGO = (16, 18, 28)  # Azul quase preto, no espaço do monitor que sobra em volta do jogo e do painel
 
 
 # Cria dois objetos Cano (o de cima e o de baixo) com uma abertura sorteada entre eles.
@@ -33,8 +37,21 @@ def criar_par_de_canos():
 
 
 pygame.init()  # Liga o pygame
-tela = pygame.display.set_mode((LARGURA_DA_TELA, ALTURA_DA_TELA), pygame.SCALED | pygame.FULLSCREEN)  # Tela cheia; SCALED amplia sem borrar a pixel art (sobram faixas pretas dos lados)
+monitor = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)  # Tela cheia, no tamanho real do monitor ("0, 0" = use o tamanho do monitor)
 pygame.display.set_caption("Flappy Bird SENAI")  # Título da janela
+tela = pygame.Surface((LARGURA_DA_TELA, ALTURA_DA_TELA))  # O jogo é desenhado nesta imagem pequena (144x256) e depois ampliado para o monitor
+
+# AMPLIAÇÃO POR UM NÚMERO INTEIRO: cada pixel do jogo vira um quadrado de "fator x fator" pixels no monitor.
+# Com um número quebrado (ex.: 4,2) uns pixels ficariam maiores que outros e a pixel art ficaria torta.
+fator_de_ampliacao = max(1, monitor.get_height() // ALTURA_DA_TELA)  # Ex.: 1080 // 256 = 4
+tamanho_do_jogo_no_monitor = (LARGURA_DA_TELA * fator_de_ampliacao, ALTURA_DA_TELA * fator_de_ampliacao)  # Ex.: 576x1024
+espaco_livre_ao_lado = monitor.get_width() - tamanho_do_jogo_no_monitor[0]  # Largura que sobra do lado do jogo
+largura_do_painel = min(espaco_livre_ao_lado - 3 * MARGEM_DO_PAINEL, LARGURA_MAXIMA_DO_PAINEL)  # O painel usa o espaço que sobra, sem ficar largo demais
+esquerda_do_jogo = (monitor.get_width() - tamanho_do_jogo_no_monitor[0] - largura_do_painel - MARGEM_DO_PAINEL) // 2  # Jogo + painel ficam centralizados juntos
+topo_do_jogo = (monitor.get_height() - tamanho_do_jogo_no_monitor[1]) // 2  # Centralizado na vertical
+area_do_jogo_no_monitor = pygame.Rect((esquerda_do_jogo, topo_do_jogo), tamanho_do_jogo_no_monitor)  # Onde o jogo ampliado aparece
+painel_de_codigo = Painel(pygame.Rect(area_do_jogo_no_monitor.right + MARGEM_DO_PAINEL, topo_do_jogo, largura_do_painel, tamanho_do_jogo_no_monitor[1]))  # Painel do lado direito do jogo
+
 imagem_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência, ele cobre tudo)
 relogio = pygame.time.Clock()  # Relógio que controla a velocidade do jogo
 
@@ -112,6 +129,10 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         placar_do_jogo.desenhar(tela)  # Só os pontos no topo, na frente dos canos
     else:  # estado "fim"
         placar_do_jogo.desenhar_fim_de_jogo(tela)  # A tela de fim de jogo por cima da cena congelada
+
+    monitor.fill(COR_EM_VOLTA_DO_JOGO)  # Pinta o monitor inteiro, apagando o quadro anterior
+    pygame.transform.scale(tela, tamanho_do_jogo_no_monitor, monitor.subsurface(area_do_jogo_no_monitor))  # Amplia o jogo pequeno direto no lugar dele no monitor
+    painel_de_codigo.desenhar(monitor)  # O painel é desenhado na resolução do monitor, por isso o texto fica nítido
     pygame.display.flip()  # Mostra na tela tudo que foi desenhado
 
 pygame.quit()  # Desliga o pygame
