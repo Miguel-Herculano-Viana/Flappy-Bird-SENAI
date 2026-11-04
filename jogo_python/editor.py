@@ -165,9 +165,8 @@ class EditorDeCodigo:
         esquerda = painel.retangulo.x + painel.margem
         y = topo
 
-        for comentario in self.comentarios:  # Explicações do desafio
-            painel.escrever(monitor, "# " + comentario, COR_DA_DICA, y)
-            y += altura
+        for comentario in self.comentarios:  # Explicações do desafio (quebradas em várias linhas se forem compridas)
+            y = painel.escrever_com_quebra(monitor, comentario, COR_DA_DICA, y, prefixo="# ")
         y += altura // 2
 
         # Linha de código: ">>> " + parte pronta + parte digitada (com fundo destacado) + cursor
@@ -180,16 +179,19 @@ class EditorDeCodigo:
             x_do_cursor = x_da_lacuna + self.posicao_do_cursor * largura_da_letra
             pygame.draw.rect(monitor, COR_DO_CURSOR, (x_do_cursor, y, 2, altura * 4 // 5))
         y += altura * 3 // 2
+        y_depois_do_codigo = y
 
         if self.valor_aceito is not None:  # Acertou
-            painel.escrever(monitor, f"OK! {self.objeto}.{self.atributo} agora vale {self.valor_aceito}", COR_DO_ACERTO, y)
+            y = painel.escrever_com_quebra(monitor, f"OK! {self.objeto}.{self.atributo} agora vale {self.valor_aceito}", COR_DO_ACERTO, y)
         elif self.mensagem_de_erro:  # Errou: mostra o erro (pode ter mais de uma linha)
             for linha_do_erro in self.mensagem_de_erro.split("\n"):
-                painel.escrever(monitor, linha_do_erro, COR_DA_DICA if linha_do_erro.startswith("#") else COR_DO_ERRO, y)
-                y += altura
+                if linha_do_erro.startswith("# "):  # Dica em português
+                    y = painel.escrever_com_quebra(monitor, linha_do_erro[2:], COR_DA_DICA, y, prefixo="# ")
+                else:  # O erro, como o Python mostraria
+                    y = painel.escrever_com_quebra(monitor, linha_do_erro, COR_DO_ERRO, y)
         else:
-            painel.escrever(monitor, f"# valores permitidos: de {self.minimo} a {self.maximo}. Aperte ENTER para rodar.", COR_DA_DICA, y)
-        y = max(y + altura, topo + altura * (len(self.comentarios) + 6))
+            y = painel.escrever_com_quebra(monitor, f"valores permitidos: de {self.minimo} a {self.maximo}. Aperte ENTER para rodar.", COR_DA_DICA, y, prefixo="# ")
+        y = max(y + altura // 2, y_depois_do_codigo + altura * 3)  # A barra fica sempre no mesmo lugar, com ou sem erro
 
         # Barra de tempo: encolhe conforme o tempo passa
         if self.segundos_totais is None:  # Sem limite de tempo: não tem barra

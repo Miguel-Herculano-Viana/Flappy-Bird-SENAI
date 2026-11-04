@@ -129,8 +129,9 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         # CANOS POR DISTÂNCIA (e não por relógio): em câmera lenta o cenário anda menos, então os canos também demoram mais para aparecer.
         # Com um relógio de verdade, eles continuariam nascendo no mesmo ritmo e ficariam amontoados.
         distancia_desde_o_ultimo_cano += VELOCIDADE_DO_CENARIO * tempo_do_jogo  # Soma o quanto o cenário andou neste quadro
-        if distancia_desde_o_ultimo_cano >= DISTANCIA_ENTRE_OS_CANOS:  # Já andou o suficiente para um novo par?
-            distancia_desde_o_ultimo_cano -= DISTANCIA_ENTRE_OS_CANOS  # Guarda só o que passou da conta
+        distancia_ate_o_proximo_par = gerenciador_de_desafios.distancia_ate_o_proximo_par(DISTANCIA_ENTRE_OS_CANOS)  # Normalmente 90, mas um desafio pode mudar
+        if distancia_desde_o_ultimo_cano >= distancia_ate_o_proximo_par:  # Já andou o suficiente para um novo par?
+            distancia_desde_o_ultimo_cano -= distancia_ate_o_proximo_par  # Guarda só o que passou da conta
             novos_canos = criar_par_de_canos(LARGURA_DA_TELA - distancia_desde_o_ultimo_cano)  # Desconta o que passou, para o espaço entre os pares ficar sempre igual
             todos_os_canos.add(novos_canos)  # Coloca no grupo dos canos (para a batida)
             todos_os_objetos_do_jogo.add(novos_canos)  # E no grupo geral (para mover e desenhar)
@@ -165,7 +166,7 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
 
     # MEDIDORES: o painel mostra os atributos que o visitante pode mudar com código, sempre com o valor de agora.
     painel_de_codigo.mostrar_valor("canos.abertura", gerenciador_de_desafios.valor_para_o_medidor("canos.abertura", passaro_do_jogador, TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS), maximo_da_barra=120)
-    painel_de_codigo.mostrar_valor("canos.distancia", DISTANCIA_ENTRE_OS_CANOS, maximo_da_barra=150)
+    painel_de_codigo.mostrar_valor("canos.distancia", gerenciador_de_desafios.valor_para_o_medidor("canos.distancia", passaro_do_jogador, DISTANCIA_ENTRE_OS_CANOS), maximo_da_barra=150)
     painel_de_codigo.mostrar_valor("passaro.forca_da_gravidade", passaro_do_jogador.forca_da_gravidade, maximo_da_barra=1000)
     painel_de_codigo.mostrar_valor("passaro.forca_do_pulo", passaro_do_jogador.forca_do_pulo, maximo_da_barra=250)
     painel_de_codigo.atualizar(tempo_do_quadro)  # Anima as barras (no tempo real)

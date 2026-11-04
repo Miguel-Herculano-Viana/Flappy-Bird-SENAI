@@ -14,6 +14,7 @@ import random  # Ferramenta do Python para sortear números
 import pygame  # Biblioteca de jogos que estamos usando
 
 from avisos import Aviso, criar_caixa  # Pop-ups e caixas de texto
+from cano import VELOCIDADE_DO_CENARIO  # Para a prévia do pulo andar junto com o cenário
 from editor import EditorDeCodigo  # O editor onde o visitante digita o código
 
 # BALANCEAMENTO: mude estes números para deixar o jogo mais fácil ou mais difícil
@@ -27,6 +28,10 @@ ESCALA_DO_TEMPO_EDITANDO = 0.15  # Câmera lenta enquanto o editor está aberto
 ESCALA_DO_TEMPO_DE_ALERTA = 0.5  # Câmera lenta leve quando o desafio aparece, para dar tempo de apertar ENTER
 SEGUNDOS_MOSTRANDO_O_ACERTO = 1.5  # Quanto tempo o "OK!" fica no painel depois de acertar
 SEGUNDOS_COMEMORANDO_NO_TUTORIAL = 2.0  # No tutorial, o jogo espera este tempo parado para o visitante ver o resultado
+PARES_DE_DURACAO_DOS_EFEITOS = 3  # Gravidade pesada, pulo fraco e canos colados duram 3 pares de canos
+DISTANCIA_DOS_CANOS_COLADOS = 45  # Distância entre os pares no desafio dos canos colados (o cano tem 32 de largura: sobra quase nada)
+PASSOS_DA_PREVIA_DO_PULO = 24  # Quantos passos de futuro a prévia do pulo calcula
+TEMPO_DE_CADA_PASSO_DA_PREVIA = 1 / 30  # Cada passo da prévia vale 1/30 de segundo
 X_ONDE_O_CANO_FICA_VISIVEL = 112  # Um cano novo nasce em x = 144 (fora da tela); em 112 ele já aparece bem
 AREA_VISIVEL_DO_JOGO = pygame.Rect(0, 0, 144, 224)  # A tela do jogo acima do chão
 
@@ -34,6 +39,7 @@ COR_DO_ALERTA = (255, 110, 110)  # Vermelho
 COR_DO_ACERTO = (120, 230, 120)  # Verde
 COR_DA_DICA = (255, 210, 60)  # Amarelo
 COR_DA_PREVIA = (120, 230, 120)  # Verde, para o contorno "fantasma" do resultado
+COR_DE_VOLTA_AO_NORMAL = (120, 190, 255)  # Azul
 
 
 class Desafio:
@@ -43,7 +49,8 @@ class Desafio:
     #   minimo, maximo       -> faixa permitida (fora dela dá ValueError e o jogo não muda)
     #   alerta               -> texto do pop-up quando o desafio aparece
     #   explicacao           -> linhas do tutorial, mostradas na primeira vez
-    def __init__(self, objeto, atributo, minimo, maximo, alerta, explicacao):
+    #   pares_de_duracao     -> por quantos pares de canos o desafio dura (depois o jogo volta ao normal)
+    def __init__(self, objeto, atributo, minimo, maximo, alerta, explicacao, pares_de_duracao):
         # ATRIBUTOS
         self.objeto = objeto
         self.atributo = atributo
@@ -51,7 +58,10 @@ class Desafio:
         self.maximo = maximo
         self.alerta = alerta
         self.explicacao = explicacao
+        self.pares_de_duracao = pares_de_duracao
         self.nivel_de_digitacao = 1  # 1 = só o valor; 2 = atributo e valor; 3 = a linha inteira
+        self.pares = []  # Os pares de canos que fazem parte deste desafio (cada par é uma dupla: cano de cima, cano de baixo)
+        self.passaro = None  # O pássaro da partida (guardado no começo do desafio)
 
     # Quanto da linha já vem escrito, de acordo com o nível. A cada acerto, vem menos pronto.
     def codigo_pronto(self):
@@ -69,10 +79,15 @@ class Desafio:
             return [self.alerta.capitalize(), f"Escreva o atributo e o valor: {self.atributo} = número"]
         return [self.alerta.capitalize(), f"Escreva a linha inteira: {self.objeto}.{self.atributo} = número"]
 
-    # MÉTODOS QUE CADA DESAFIO SOBRESCREVE (aqui eles não fazem nada; as classes filhas fazem o trabalho)
+    # MÉTODOS QUE AS CLASSES FILHAS PODEM SOBRESCREVER. Aqui fica o comportamento comum a todos os desafios.
 
-    def comecar(self, passaro, par_de_canos):  # Cria o problema (ex.: fecha os canos)
-        pass
+    def comecar(self, passaro, par_de_canos):  # Cria o problema. As filhas chamam este com super() e depois criam o seu problema
+        self.passaro = passaro
+        self.pares = [par_de_canos]  # O desafio começa no par que acabou de nascer
+
+    def novo_par(self, par_de_canos):  # Nasceu um par enquanto o desafio está ativo: ele entra no desafio se ainda couber
+        if len(self.pares) < self.pares_de_duracao:
+            self.pares.append(par_de_canos)
 
     def esta_visivel(self):  # O problema já aparece na tela? (só então o alerta e o tutorial aparecem)
         return True
@@ -80,14 +95,18 @@ class Desafio:
     def aplicar(self, valor, passaro):  # Usa o valor digitado pelo visitante
         pass
 
-    def terminou(self, passaro):  # O desafio já passou?
-        return True
+    def terminou(self, passaro):  # O desafio passou quando o ÚLTIMO par dele ficou para trás do pássaro
+        ultimo_cano = self.pares[-1][0]
+        return len(self.pares) == self.pares_de_duracao and (ultimo_cano.rect.right < passaro.rect.left or not ultimo_cano.alive())
 
-    def desfazer(self, passaro):  # Volta o jogo ao normal quando o desafio acaba
-        pass
+    def desfazer(self, passaro):  # Volta o jogo ao normal. Devolve o texto do aviso (ou None se não tinha nada para desfazer)
+        return None
 
     def valor_atual(self, passaro):  # Valor do atributo agora (para os medidores e os avisos)
         return None
+
+    def distancia_ate_o_proximo_par(self, distancia_normal):  # O desafio pode mudar onde nasce o próximo par
+        return distancia_normal
 
     def area_do_problema(self):  # Retângulo (na tela do jogo) que pisca para mostrar onde está o problema
         return None
@@ -105,39 +124,149 @@ class DesafioCanosFechados(Desafio):
             "'canos' é um OBJETO do jogo e 'abertura' é um ATRIBUTO dele.",
             "O sinal = guarda um valor novo no atributo.",
             "Digite um número e aperte ENTER.",
-        ])
-        self.cano_de_cima = None
-        self.cano_de_baixo = None
+        ], pares_de_duracao=1)
         self.centro = 0.0
 
     # SOBRESCRITA: fecha o par de canos que acabou de nascer. Os canos deslizam até se encostarem.
     def comecar(self, passaro, par_de_canos):
-        self.cano_de_cima, self.cano_de_baixo = par_de_canos
-        self.centro = (self.cano_de_cima.borda + self.cano_de_baixo.borda) / 2  # Meio da abertura
-        self.cano_de_cima.mudar_borda(self.centro)  # As duas bordas vão para o meio...
-        self.cano_de_baixo.mudar_borda(self.centro)  # ...e os canos se fecham
+        super().comecar(passaro, par_de_canos)  # Primeiro, o que todo desafio faz
+        cano_de_cima, cano_de_baixo = par_de_canos
+        self.centro = (cano_de_cima.borda + cano_de_baixo.borda) / 2  # Meio da abertura
+        cano_de_cima.mudar_borda(self.centro)  # As duas bordas vão para o meio...
+        cano_de_baixo.mudar_borda(self.centro)  # ...e os canos se fecham
 
     def esta_visivel(self):
-        return self.cano_de_cima.rect.x <= X_ONDE_O_CANO_FICA_VISIVEL
+        return self.pares[0][0].rect.x <= X_ONDE_O_CANO_FICA_VISIVEL
 
     # Abre os canos com a abertura digitada, metade para cima e metade para baixo do meio.
     def aplicar(self, valor, passaro):
-        self.cano_de_cima.mudar_borda(self.centro - valor / 2)
-        self.cano_de_baixo.mudar_borda(self.centro + valor / 2)
-
-    def terminou(self, passaro):
-        return self.cano_de_cima.rect.right < passaro.rect.left or not self.cano_de_cima.alive()  # O par ficou para trás (ou saiu do jogo)
+        cano_de_cima, cano_de_baixo = self.pares[0]
+        cano_de_cima.mudar_borda(self.centro - valor / 2)
+        cano_de_baixo.mudar_borda(self.centro + valor / 2)
 
     def valor_atual(self, passaro):
-        return round(self.cano_de_baixo.borda_alvo - self.cano_de_cima.borda_alvo)  # Distância entre as duas bordas
+        cano_de_cima, cano_de_baixo = self.pares[0]
+        return round(cano_de_baixo.borda_alvo - cano_de_cima.borda_alvo)  # Distância entre as duas bordas
 
     def area_do_problema(self):
-        return self.cano_de_cima.rect.union(self.cano_de_baixo.rect).clip(AREA_VISIVEL_DO_JOGO)  # Só a parte que aparece na tela
+        cano_de_cima, cano_de_baixo = self.pares[0]
+        return cano_de_cima.rect.union(cano_de_baixo.rect).clip(AREA_VISIVEL_DO_JOGO)  # Só a parte que aparece na tela
 
     # Contorno verde de onde a abertura vai ficar.
     def desenhar_previa(self, monitor, para_o_monitor, valor):
-        abertura = pygame.Rect(self.cano_de_cima.rect.x, round(self.centro - valor / 2), self.cano_de_cima.rect.width, round(valor))  # Na tela do jogo
+        cano_de_cima = self.pares[0][0]
+        abertura = pygame.Rect(cano_de_cima.rect.x, round(self.centro - valor / 2), cano_de_cima.rect.width, round(valor))  # Na tela do jogo
         desenhar_retangulo_transparente(monitor, para_o_monitor(abertura), COR_DA_PREVIA)
+
+
+# Um desafio que estraga um atributo do PÁSSARO por alguns pares de canos (gravidade pesada, pulo fraco).
+# Repare que é UMA classe só, usada duas vezes com dados diferentes (veja o GerenciadorDeDesafios).
+class DesafioDoPassaro(Desafio):
+
+    # "valor_ruim" é o valor que o atributo recebe quando o desafio começa (ex.: gravidade 800).
+    def __init__(self, atributo, valor_ruim, minimo, maximo, alerta, explicacao):
+        super().__init__("passaro", atributo, minimo, maximo, alerta, explicacao, pares_de_duracao=PARES_DE_DURACAO_DOS_EFEITOS)
+        self.valor_ruim = valor_ruim
+        self.valor_normal = None  # Guardado no começo, para voltar ao normal no fim
+
+    # getattr e setattr leem e mudam um atributo pelo NOME (um texto). É o que o editor "faria" com o código digitado.
+    def comecar(self, passaro, par_de_canos):
+        super().comecar(passaro, par_de_canos)
+        self.valor_normal = getattr(passaro, self.atributo)  # Ex.: lê passaro.forca_da_gravidade
+        setattr(passaro, self.atributo, self.valor_ruim)  # Ex.: passaro.forca_da_gravidade = 800
+
+    def aplicar(self, valor, passaro):
+        setattr(passaro, self.atributo, valor)  # Aqui o código do visitante vira realidade
+
+    def desfazer(self, passaro):
+        setattr(passaro, self.atributo, self.valor_normal)
+        return f"{self.atributo} voltou ao normal: {round(self.valor_normal)}"
+
+    def valor_atual(self, passaro):
+        return round(getattr(passaro, self.atributo))
+
+    def area_do_problema(self):
+        return self.passaro.rect.inflate(-14, -14)  # O desenho do pássaro tem bastante sobra transparente em volta
+
+    # PRÉVIA: desenha pontinhos mostrando o caminho de um pulo com o valor que está sendo digitado.
+    # É a mesma conta que o pássaro faz (passaro.py), só que feita de antemão, alguns quadros no futuro.
+    def desenhar_previa(self, monitor, para_o_monitor, valor):
+        gravidade = valor if self.atributo == "forca_da_gravidade" else self.passaro.forca_da_gravidade
+        pulo = valor if self.atributo == "forca_do_pulo" else self.passaro.forca_do_pulo
+        x, y = float(self.passaro.rect.centerx), self.passaro.posicao_vertical
+        velocidade = -pulo  # Começa com um pulo
+        for passo in range(PASSOS_DA_PREVIA_DO_PULO):
+            velocidade = min(velocidade + gravidade * TEMPO_DE_CADA_PASSO_DA_PREVIA, self.passaro.velocidade_maxima_de_queda)
+            y += velocidade * TEMPO_DE_CADA_PASSO_DA_PREVIA
+            x += VELOCIDADE_DO_CENARIO * TEMPO_DE_CADA_PASSO_DA_PREVIA  # O cenário anda; em relação a ele, o pássaro vai para a direita
+            if passo % 2 == 0:  # Um pontinho a cada dois passos
+                ponto = para_o_monitor(pygame.Rect(round(x), round(y), 1, 1))
+                pygame.draw.circle(monitor, COR_DA_PREVIA, ponto.center, max(3, ponto.width // 2))
+
+
+# CANOS COLADOS: uma "onda" de pares nasce quase encostada. O visitante muda a distância e eles se afastam.
+class DesafioCanosColados(Desafio):
+
+    def __init__(self):
+        super().__init__("canos", "distancia", 80, 130, "CANOS COLADOS!", [
+            "Os canos vieram colados! Não dá para passar entre eles.",
+            "'distancia' é o ATRIBUTO com o espaço entre um par de canos e o próximo.",
+            "Quanto MAIOR o número, mais espaço para voar.",
+            "Digite um número e aperte ENTER.",
+        ], pares_de_duracao=PARES_DE_DURACAO_DOS_EFEITOS)
+        self.valor_aceito = None  # A distância digitada (None enquanto o visitante não acertar)
+        self.ja_nasceu_o_par_depois_da_onda = False
+
+    def comecar(self, passaro, par_de_canos):
+        super().comecar(passaro, par_de_canos)
+        self.valor_aceito = None
+        self.ja_nasceu_o_par_depois_da_onda = False
+
+    # Cada par novo da onda já nasce empurrado para o lugar certo, se o visitante já tiver acertado.
+    def novo_par(self, par_de_canos):
+        if len(self.pares) >= self.pares_de_duracao:  # A onda já está completa: este é o primeiro par normal depois dela
+            self.ja_nasceu_o_par_depois_da_onda = True
+        super().novo_par(par_de_canos)
+        if self.valor_aceito is not None:
+            self.aplicar(self.valor_aceito, self.passaro)
+
+    # Enquanto a onda nasce, os pares vêm colados. Depois dela, o próximo par respeita o empurrão do último.
+    def distancia_ate_o_proximo_par(self, distancia_normal):
+        if len(self.pares) < self.pares_de_duracao:
+            return DISTANCIA_DOS_CANOS_COLADOS
+        if not self.ja_nasceu_o_par_depois_da_onda:
+            return distancia_normal + self.pares[-1][0].deslocamento_alvo  # Para o par seguinte não nascer em cima do último da onda
+        return distancia_normal
+
+    def esta_visivel(self):  # O problema aparece quando o 2º par (o primeiro colado) entra na tela
+        return len(self.pares) >= 2 and self.pares[1][0].rect.x <= X_ONDE_O_CANO_FICA_VISIVEL
+
+    # Empurra cada par da onda para a direita, para que fiquem a "valor" pixels um do outro (deslizando).
+    def aplicar(self, valor, passaro):
+        self.valor_aceito = valor
+        for posicao_na_onda, (cano_de_cima, cano_de_baixo) in enumerate(self.pares):
+            empurrao = posicao_na_onda * (valor - DISTANCIA_DOS_CANOS_COLADOS)  # O 1º não anda, o 2º anda um pouco, o 3º anda o dobro
+            cano_de_cima.mudar_deslocamento(empurrao)
+            cano_de_baixo.mudar_deslocamento(empurrao)
+
+    def desfazer(self, passaro):
+        return "canos.distancia voltou ao normal"
+
+    def valor_atual(self, passaro):
+        return self.valor_aceito if self.valor_aceito is not None else DISTANCIA_DOS_CANOS_COLADOS
+
+    def area_do_problema(self):
+        area = self.pares[0][0].rect.union(self.pares[0][1].rect)
+        for cano_de_cima, cano_de_baixo in self.pares[1:]:
+            area = area.union(cano_de_cima.rect).union(cano_de_baixo.rect)
+        return area.clip(AREA_VISIVEL_DO_JOGO)
+
+    # Contornos verdes de onde cada par da onda vai ficar.
+    def desenhar_previa(self, monitor, para_o_monitor, valor):
+        for posicao_na_onda, (cano_de_cima, _) in enumerate(self.pares):
+            x_final = cano_de_cima.posicao_horizontal + posicao_na_onda * (valor - DISTANCIA_DOS_CANOS_COLADOS)
+            lugar = pygame.Rect(round(x_final), 0, cano_de_cima.rect.width, AREA_VISIVEL_DO_JOGO.height)
+            desenhar_retangulo_transparente(monitor, para_o_monitor(lugar), COR_DA_PREVIA)
 
 
 class GerenciadorDeDesafios:
@@ -148,7 +277,22 @@ class GerenciadorDeDesafios:
         # ATRIBUTOS
         self.avisos = avisos
         self.placar = placar
-        self.desafios = [DesafioCanosFechados()]  # Na ordem em que aparecem pela primeira vez
+        self.desafios = [  # Na ordem em que aparecem pela primeira vez
+            DesafioCanosFechados(),
+            DesafioDoPassaro("forca_da_gravidade", 800, 350, 550, "GRAVIDADE PESADA!", [
+                "A gravidade ficou pesada! O pássaro cai rápido demais.",
+                "'passaro' é um OBJETO e 'forca_da_gravidade' é um ATRIBUTO dele.",
+                "Quanto MENOR o número, mais devagar o pássaro cai.",
+                "Digite um número e aperte ENTER.",
+            ]),
+            DesafioDoPassaro("forca_do_pulo", 110, 140, 190, "PULO FRACO!", [
+                "O pulo ficou fraco! O pássaro quase não sobe.",
+                "'forca_do_pulo' é o ATRIBUTO com a força de cada pulo.",
+                "Quanto MAIOR o número, mais alto o pássaro pula.",
+                "Digite um número e aperte ENTER.",
+            ]),
+            DesafioCanosColados(),
+        ]
         self.desafios_com_tutorial_visto = []  # Desafios que já apareceram nesta partida
         self.pares_de_espera = {}  # COOLDOWN: desafio -> quantos pares faltam para ele poder voltar
         self.pares_ate_o_proximo_desafio = PRIMEIRO_DESAFIO_NO_PAR
@@ -174,7 +318,8 @@ class GerenciadorDeDesafios:
     def novo_par_criado(self, par_de_canos, passaro):
         for desafio in self.pares_de_espera:  # Cada par novo diminui o cooldown de todos
             self.pares_de_espera[desafio] -= 1
-        if self.desafio_ativo:  # Já tem um desafio acontecendo
+        if self.desafio_ativo:  # Já tem um desafio acontecendo: o par pode fazer parte dele
+            self.desafio_ativo.novo_par(par_de_canos)
             return
         self.pares_ate_o_proximo_desafio -= 1
         if self.pares_ate_o_proximo_desafio > 0:  # Ainda não é a hora
@@ -247,7 +392,9 @@ class GerenciadorDeDesafios:
     # O desafio passou: desfaz o efeito, liga o cooldown e marca quando vem o próximo.
     def terminar(self, passaro):
         desafio = self.desafio_ativo
-        desafio.desfazer(passaro)
+        texto_do_aviso = desafio.desfazer(passaro)  # POLIMORFISMO: cada desafio desfaz o seu efeito
+        if texto_do_aviso:
+            self.avisos.append(Aviso(texto_do_aviso, COR_DE_VOLTA_AO_NORMAL))
         self.pares_de_espera[desafio] = PARES_DE_ESPERA_DO_MESMO_DESAFIO
         if desafio not in self.desafios_com_tutorial_visto:
             self.desafios_com_tutorial_visto.append(desafio)
@@ -312,6 +459,12 @@ class GerenciadorDeDesafios:
         if self.desafio_ativo and self.ja_alertou and not self.resolvido:
             return ESCALA_DO_TEMPO_EDITANDO if self.editor_aberto else ESCALA_DO_TEMPO_DE_ALERTA
         return 1.0
+
+    # Onde nasce o próximo par de canos: normalmente na distância de sempre, mas um desafio pode mudar.
+    def distancia_ate_o_proximo_par(self, distancia_normal):
+        if self.desafio_ativo:
+            return self.desafio_ativo.distancia_ate_o_proximo_par(distancia_normal)
+        return distancia_normal
 
     # O valor que o medidor do painel deve mostrar: durante o desafio, o valor do desafio; fora dele, o normal.
     def valor_para_o_medidor(self, nome_no_codigo, passaro, valor_normal):

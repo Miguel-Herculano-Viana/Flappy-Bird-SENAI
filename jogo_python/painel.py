@@ -4,6 +4,7 @@
 # Em cima fica o editor (quando tem um desafio); embaixo, os MEDIDORES: os atributos do jogo e seus valores.
 
 import re  # Ferramenta do Python para achar padrões em textos (usada para colorir o código)
+import textwrap  # Ferramenta do Python que quebra um texto comprido em várias linhas
 
 import pygame  # Biblioteca de jogos que estamos usando
 
@@ -81,8 +82,9 @@ class Painel:
             editor.desenhar(monitor, self, topo_do_conteudo)
         else:  # Sem editor: uma explicação (ou a mensagem recebida)
             linhas = mensagem or ["Voe com ESPAÇO.", "Quando aparecer um desafio, aperte ENTER", "e mude o jogo com código!"]
-            for numero_da_linha, linha in enumerate(linhas):
-                self.escrever(monitor, "# " + linha, COR_DE_COMENTARIO, topo_do_conteudo + numero_da_linha * self.altura_da_linha)
+            y = topo_do_conteudo
+            for linha in linhas:
+                y = self.escrever_com_quebra(monitor, linha, COR_DE_COMENTARIO, y, prefixo="# ")
         self.desenhar_medidores(monitor)
 
     # Desenha os medidores no pé do painel: uma linha de código e uma barra para cada atributo.
@@ -107,6 +109,16 @@ class Painel:
     def escrever(self, monitor, texto, cor, distancia_do_topo):
         imagem_do_texto = self.fonte.render(texto, True, cor)  # Transforma o texto em imagem
         monitor.blit(imagem_do_texto, (self.retangulo.x + self.margem, distancia_do_topo))  # Desenha com a margem da esquerda
+
+    # MÉTODO AUXILIAR: escreve um texto que pode não caber numa linha só; ele é quebrado em várias.
+    # "prefixo" vai no começo de cada linha (ex.: "# " para todas as linhas de um comentário).
+    # Devolve a altura logo abaixo da última linha, para saber onde escrever a próxima coisa.
+    def escrever_com_quebra(self, monitor, texto, cor, distancia_do_topo, prefixo=""):
+        letras_por_linha = (self.retangulo.width - 2 * self.margem) // self.fonte.size("a")[0]  # Quantas letras cabem na largura
+        for linha in textwrap.wrap(texto, letras_por_linha, initial_indent=prefixo, subsequent_indent=prefixo):
+            self.escrever(monitor, linha, cor, distancia_do_topo)
+            distancia_do_topo += self.altura_da_linha
+        return distancia_do_topo
 
     # MÉTODO AUXILIAR: escreve código com cores diferentes para nomes, números e sinais (como um editor de verdade).
     def escrever_colorido(self, monitor, texto, x, y, so_prompt=False):
