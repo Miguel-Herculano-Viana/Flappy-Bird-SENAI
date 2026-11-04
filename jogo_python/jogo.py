@@ -1,6 +1,7 @@
 # ARQUIVO PRINCIPAL DO JOGO: é este que rodamos com "python jogo.py"
 
 import random  # Ferramenta do Python para sortear números
+from pathlib import Path  # Ferramenta do Python para montar caminhos de arquivos
 
 import pygame  # Biblioteca de jogos que estamos usando
 
@@ -13,7 +14,7 @@ LARGURA_DA_TELA = 144  # Largura do jogo em pixels (o pygame amplia para caber n
 ALTURA_DA_TELA = 256  # Altura do jogo em pixels
 ALTURA_DO_CHAO = 32  # Altura da faixa de chão no pé da tela
 TOPO_DO_CHAO = ALTURA_DA_TELA - ALTURA_DO_CHAO  # Altura da tela onde o chão começa
-COR_DO_CEU = (112, 197, 206)  # Cor de fundo em RGB (vermelho, verde, azul)
+CAMINHO_DA_IMAGEM_DO_FUNDO = Path(__file__).parent.parent / "src" / "assets" / "fundo.png"  # Céu com nuvens e cidade (144x224, tudo acima do chão)
 QUADROS_POR_SEGUNDO = 60  # Quantas vezes por segundo a tela é redesenhada
 POSICAO_INICIAL_DO_PASSARO = (48, 112)  # Onde o pássaro aparece no começo do jogo
 TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS = 64  # Altura do espaço por onde o pássaro passa
@@ -32,8 +33,9 @@ def criar_par_de_canos():
 
 
 pygame.init()  # Liga o pygame
-tela = pygame.display.set_mode((LARGURA_DA_TELA, ALTURA_DA_TELA), pygame.SCALED)  # Cria a janela; SCALED amplia sem borrar a pixel art
+tela = pygame.display.set_mode((LARGURA_DA_TELA, ALTURA_DA_TELA), pygame.SCALED | pygame.FULLSCREEN)  # Tela cheia; SCALED amplia sem borrar a pixel art (sobram faixas pretas dos lados)
 pygame.display.set_caption("Flappy Bird SENAI")  # Título da janela
+imagem_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência, ele cobre tudo)
 relogio = pygame.time.Clock()  # Relógio que controla a velocidade do jogo
 
 EVENTO_DE_CRIAR_CANOS = pygame.event.custom_type()  # Cria um tipo de evento nosso, como se fosse uma "tecla" que o próprio jogo aperta
@@ -55,7 +57,8 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
     tempo_do_quadro = relogio.tick(QUADROS_POR_SEGUNDO) / 1000  # Segundos que passaram desde o último quadro
 
     for evento in pygame.event.get():  # Verifica tudo que aconteceu (teclas, cliques, fechar a janela, nosso evento)
-        if evento.type == pygame.QUIT:  # Clicou no X da janela?
+        apertou_esc = evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE  # Em tela cheia não tem o X da janela, então o ESC fecha o jogo
+        if evento.type == pygame.QUIT or apertou_esc:  # Fechou a janela ou apertou ESC?
             jogo_esta_rodando = False  # Então sai do laço e o jogo termina
         if evento.type == EVENTO_DE_CRIAR_CANOS and estado_do_jogo == "jogando":  # Chegou a hora de um novo par de canos (e estamos jogando)?
             novos_canos = criar_par_de_canos()  # Cria os dois objetos Cano
@@ -100,7 +103,7 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
             momento_em_que_o_jogo_acabou = pygame.time.get_ticks()  # Anota a hora, para a pausa antes de recomeçar
             placar_do_jogo.registrar_fim_de_jogo()  # O placar confere e guarda o recorde
 
-    tela.fill(COR_DO_CEU)  # Pinta o fundo, apagando o quadro anterior
+    tela.blit(imagem_do_fundo, (0, 0))  # Desenha o fundo, apagando o quadro anterior
     todos_os_objetos_do_jogo.draw(tela)  # Desenha cada objeto do grupo (usa o "image" e o "rect" deles)
     tela.blit(chao_do_jogo.image, chao_do_jogo.rect)  # O chão é desenhado depois, para tampar a ponta de baixo dos canos
     if estado_do_jogo == "inicio":  # Qual texto mostrar depende do estado

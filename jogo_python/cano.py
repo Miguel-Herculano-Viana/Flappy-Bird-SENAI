@@ -2,11 +2,11 @@
 # Cada cano na tela é um OBJETO desta classe. O par de canos (cima e baixo) são dois objetos
 # criados com o MESMO molde, só que com atributos diferentes.
 
+from pathlib import Path  # Ferramenta do Python para montar caminhos de arquivos
+
 import pygame  # Biblioteca de jogos que estamos usando
 
-LARGURA_DO_CANO = 26  # Largura de cada cano em pixels
-ALTURA_DO_CANO = 256  # Do tamanho da tela inteira, para nunca sobrar um buraco na ponta
-COR_DO_CANO = (115, 191, 46)  # Verde, em RGB (vermelho, verde, azul)
+CAMINHO_DA_IMAGEM_DO_CANO = Path(__file__).parent.parent / "src" / "assets" / "cano.png"  # Desenho do cano (32x256, com a "tampa" em cima)
 VELOCIDADE_DO_CENARIO = 60.0  # Quantos pixels por segundo os canos (e o chão) andam para a esquerda
 
 
@@ -23,9 +23,9 @@ class Cano(pygame.sprite.Sprite):
         self.posicao_horizontal = float(posicao_horizontal)  # Posição com casas decimais, para o movimento ficar suave
         self.vale_ponto = fica_em_cima  # Só o cano de cima vale ponto, assim cada PAR de canos conta 1 ponto só
 
-        self.image = pygame.Surface((LARGURA_DO_CANO, ALTURA_DO_CANO))  # Cria uma imagem vazia do tamanho do cano
-        self.image.fill(COR_DO_CANO)  # Pinta a imagem de verde
+        self.image = pygame.image.load(CAMINHO_DA_IMAGEM_DO_CANO).convert_alpha()  # Carrega o desenho (com transparência)
         if fica_em_cima:  # Cano de cima: pendurado, termina na borda da abertura
+            self.image = pygame.transform.flip(self.image, False, True)  # Vira de cabeça para baixo, para a tampa ficar virada para a abertura
             self.rect = self.image.get_rect(bottomleft=(posicao_horizontal, borda_da_abertura))  # A parte de BAIXO dele fica na borda
         else:  # Cano de baixo: começa na borda da abertura e vai até o chão
             self.rect = self.image.get_rect(topleft=(posicao_horizontal, borda_da_abertura))  # A parte de CIMA dele fica na borda
