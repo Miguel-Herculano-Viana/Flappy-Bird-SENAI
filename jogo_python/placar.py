@@ -7,6 +7,8 @@ from pathlib import Path  # Ferramenta do Python para montar caminhos de arquivo
 import pygame  # Biblioteca de jogos que estamos usando
 
 CAMINHO_DO_ARQUIVO_DO_RECORDE = Path(__file__).parent / "recorde.txt"  # Arquivo onde o recorde fica guardado, mesmo fechando o jogo
+CAMINHO_DO_ARQUIVO_DO_RECORDE_DA_NAVE = Path(__file__).parent / "recorde_nave.txt"  # O Modo Nave tem um recorde separado
+COR_DO_MODO_ESCOLHIDO = (255, 220, 0)  # Amarelo, na tela de início
 TAMANHO_DA_FONTE_GRANDE = 28  # Tamanho das letras dos pontos e do "FIM DE JOGO"
 TAMANHO_DA_FONTE_PEQUENA = 20  # Tamanho das letras das outras frases
 COR_DO_TEXTO = (255, 255, 255)  # Branco
@@ -19,15 +21,18 @@ class Placar:
 
     # CONSTRUTOR: todo placar novo começa com zero pontos e lê o recorde guardado no arquivo.
     # "centro_horizontal" é onde os textos ficam centralizados (no meio da parte da tela que o painel não cobre).
-    def __init__(self, centro_horizontal):
+    # "arquivo_do_recorde" muda de um modo de jogo para o outro (cada modo tem o seu recorde).
+    def __init__(self, centro_horizontal, arquivo_do_recorde=CAMINHO_DO_ARQUIVO_DO_RECORDE):
         # ATRIBUTOS
         self.centro_horizontal = centro_horizontal
+        self.arquivo_do_recorde = arquivo_do_recorde
+        self.titulo_do_fim = "FIM DE JOGO"  # O Modo Nave troca para "VOCÊ VENCEU!" quando o visitante vence
         self.pontos = 0  # Quantos canos o jogador já passou nesta partida
         self.bateu_o_recorde = False  # Vira True se esta partida passar o recorde
         self.fonte_grande = pygame.font.Font(None, TAMANHO_DA_FONTE_GRANDE)  # Fonte das letras grandes ("None" = fonte padrão do pygame)
         self.fonte_pequena = pygame.font.Font(None, TAMANHO_DA_FONTE_PEQUENA)  # Fonte das letras pequenas
-        if CAMINHO_DO_ARQUIVO_DO_RECORDE.exists():  # Já existe um recorde guardado?
-            self.recorde = int(CAMINHO_DO_ARQUIVO_DO_RECORDE.read_text())  # Lê o número que está no arquivo
+        if self.arquivo_do_recorde.exists():  # Já existe um recorde guardado?
+            self.recorde = int(self.arquivo_do_recorde.read_text())  # Lê o número que está no arquivo
         else:  # Primeira vez que o jogo roda neste computador
             self.recorde = 0  # Ainda não tem recorde
 
@@ -42,21 +47,27 @@ class Placar:
         if self.pontos > self.recorde:  # Passou o recorde?
             self.recorde = self.pontos  # O recorde agora é a pontuação desta partida
             self.bateu_o_recorde = True  # Marca que bateu, para mostrar na tela
-            CAMINHO_DO_ARQUIVO_DO_RECORDE.write_text(str(self.recorde))  # Grava no arquivo, para não perder ao fechar o jogo
+            self.arquivo_do_recorde.write_text(str(self.recorde))  # Grava no arquivo, para não perder ao fechar o jogo
 
     # Desenha só os pontos no topo da tela, durante a partida.
     def desenhar(self, tela):
         self.desenhar_texto_com_sombra(tela, str(self.pontos), self.fonte_grande, COR_DO_TEXTO, DISTANCIA_DO_TOPO_DA_TELA)  # Número dos pontos
 
     # Desenha a tela de início, antes da primeira batida de asas.
-    def desenhar_tela_de_inicio(self, tela):
+    # "modo_escolhido" é "desafios" ou "nave": o escolhido aparece em amarelo, com uma setinha.
+    def desenhar_tela_de_inicio(self, tela, modo_escolhido="desafios"):
         self.desenhar_texto_com_sombra(tela, "FLAPPY BIRD", self.fonte_grande, COR_DO_TEXTO, 40)  # Título
         self.desenhar_texto_com_sombra(tela, f"Recorde: {self.recorde}", self.fonte_pequena, COR_DO_DESTAQUE, 68)  # O desafio: bater este número
+        for numero, (modo, nome) in enumerate((("desafios", "DESAFIOS DE CÓDIGO"), ("nave", "MODO NAVE"))):
+            escolhido = modo == modo_escolhido
+            texto = f"> {numero + 1}  {nome} <" if escolhido else f"{numero + 1}  {nome}"
+            self.desenhar_texto_com_sombra(tela, texto, self.fonte_pequena, COR_DO_MODO_ESCOLHIDO if escolhido else COR_DO_TEXTO, 104 + numero * 18)
+        self.desenhar_texto_com_sombra(tela, "(setas para escolher)", self.fonte_pequena, COR_DO_TEXTO, 146)
         self.desenhar_texto_com_sombra(tela, "Aperte ESPAÇO", self.fonte_pequena, COR_DO_TEXTO, 176)  # Como começar
 
     # Desenha a tela de fim de jogo, com os pontos e o recorde.
     def desenhar_fim_de_jogo(self, tela):
-        self.desenhar_texto_com_sombra(tela, "FIM DE JOGO", self.fonte_grande, COR_DO_TEXTO, 64)  # Título
+        self.desenhar_texto_com_sombra(tela, self.titulo_do_fim, self.fonte_grande, COR_DO_TEXTO, 64)  # Título
         self.desenhar_texto_com_sombra(tela, f"Pontos: {self.pontos}", self.fonte_pequena, COR_DO_TEXTO, 100)  # Pontos desta partida
         self.desenhar_texto_com_sombra(tela, f"Recorde: {self.recorde}", self.fonte_pequena, COR_DO_TEXTO, 118)  # Melhor pontuação até hoje
         if self.bateu_o_recorde:  # Só aparece se esta partida bateu o recorde

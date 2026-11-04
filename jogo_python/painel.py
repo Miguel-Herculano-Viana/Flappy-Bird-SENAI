@@ -99,7 +99,17 @@ class Painel:
     def mostrar_valor(self, nome, valor, maximo_da_barra):
         if nome not in self.medidores:  # Primeira vez: cria o medidor
             self.medidores[nome] = Medidor(nome, valor, maximo_da_barra)
+        self.medidores[nome].maximo_da_barra = maximo_da_barra  # O máximo pode mudar (ex.: o XP para o próximo nível)
         self.medidores[nome].definir(valor)
+
+    def limpar_medidores(self):  # Usado ao trocar de modo de jogo (cada modo mostra atributos diferentes)
+        self.medidores.clear()
+
+    # Altura onde começa a parte dos medidores (o título "# Atributos do jogo agora:"), para o editor saber até onde pode ir.
+    def topo_dos_medidores(self):
+        if not self.medidores:
+            return self.retangulo.bottom - self.margem
+        return self.retangulo.bottom - self.margem - len(self.medidores) * self.altura_da_linha * 2 - self.altura_da_linha * 2
 
     def atualizar(self, tempo_real):
         for medidor in self.medidores.values():
@@ -156,10 +166,16 @@ class Painel:
     # Devolve a altura logo abaixo da última linha, para saber onde escrever a próxima coisa.
     def escrever_com_quebra(self, monitor, texto, cor, distancia_do_topo, prefixo=""):
         letras_por_linha = (self.retangulo.width - 2 * self.margem) // self.fonte.size("a")[0]  # Quantas letras cabem na largura
-        for linha in textwrap.wrap(texto, letras_por_linha, initial_indent=prefixo, subsequent_indent=prefixo):
+        for linha in self.quebrar(texto, letras_por_linha, prefixo):
             self.escrever(monitor, linha, cor, distancia_do_topo)
             distancia_do_topo += self.altura_da_linha
         return distancia_do_topo
+
+    # MÉTODO AUXILIAR: quebra um texto em linhas de até "letras_por_linha" letras. Se o texto já começa com o prefixo, não repete.
+    def quebrar(self, texto, letras_por_linha, prefixo=""):
+        if prefixo and texto.startswith(prefixo):
+            texto = texto[len(prefixo):]
+        return textwrap.wrap(texto, letras_por_linha, initial_indent=prefixo, subsequent_indent=prefixo) or [prefixo]
 
     # MÉTODO AUXILIAR: escreve código com cores diferentes para nomes, números e sinais (como um editor de verdade).
     def escrever_colorido(self, monitor, texto, x, y, so_prompt=False):

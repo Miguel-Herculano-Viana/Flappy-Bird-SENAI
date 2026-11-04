@@ -9,9 +9,10 @@ from avisos import Aviso  # Importa a CLASSE Aviso do arquivo avisos.py
 from cano import VELOCIDADE_DO_CENARIO, Cano  # Importa a CLASSE Cano (e a velocidade dos canos) do arquivo cano.py
 from chao import Chao  # Importa a CLASSE Chao do arquivo chao.py
 from desafios import GerenciadorDeDesafios  # Importa a CLASSE que comanda os desafios de código
+from modo_nave import ModoNave  # Importa a CLASSE do Modo Nave (o shooter)
 from painel import Painel  # Importa a CLASSE Painel do arquivo painel.py
 from passaro import Passaro  # Importa a CLASSE Passaro do arquivo passaro.py
-from placar import Placar  # Importa a CLASSE Placar do arquivo placar.py
+from placar import CAMINHO_DO_ARQUIVO_DO_RECORDE, CAMINHO_DO_ARQUIVO_DO_RECORDE_DA_NAVE, Placar  # Importa a CLASSE Placar (e onde ficam os recordes)
 
 ALTURA_MINIMA_DA_TELA = 256  # O jogo tem pelo menos 256 pixels de altura (a largura e a altura certas dependem do monitor)
 ALTURA_DO_CHAO = 32  # Altura da faixa de chão no pé da tela
@@ -26,6 +27,13 @@ MARGEM_DO_PAINEL = 8  # Espaço (em pixels do jogo) entre o painel e a borda da 
 PARTE_DA_TELA_DO_PAINEL = 0.4  # O painel ocupa 40% da largura da tela...
 LARGURA_MAXIMA_DO_PAINEL = 900  # ...mas, em monitores muito largos, não passa de 900 pixels do monitor
 TAMANHO_DA_LETRA_DOS_AVISOS = 7  # Em pixels do jogo (é multiplicado pelo fator de ampliação)
+PONTOS_ATE_A_NAVE = 3  # No Modo Nave, depois de passar 3 canos a nave aparece
+
+
+# Cada modo de jogo tem o seu recorde, então o placar muda conforme o modo escolhido.
+def criar_placar(modo):
+    arquivo = CAMINHO_DO_ARQUIVO_DO_RECORDE_DA_NAVE if modo == "nave" else CAMINHO_DO_ARQUIVO_DO_RECORDE
+    return Placar(area_livre.centerx, arquivo)  # Textos no meio da parte livre da tela
 
 
 # Cria dois objetos Cano (o de cima e o de baixo) com uma abertura sorteada entre eles.
@@ -76,15 +84,18 @@ for esquerda_do_pedaco in range(0, LARGURA_DA_TELA, pedaco_do_fundo.get_width())
 relogio = pygame.time.Clock()  # Relógio que controla a velocidade do jogo
 
 passaro_do_jogador = Passaro(POSICAO_INICIAL_DO_PASSARO)  # Cria um OBJETO a partir da classe Passaro
-placar_do_jogo = Placar(area_livre.centerx)  # Cria um OBJETO a partir da classe Placar (textos no meio da parte livre)
+modo_escolhido = "desafios"  # Modo de jogo escolhido na tela de início: "desafios" ou "nave"
+modo_nave = None  # O OBJETO do Modo Nave (só existe depois que a nave aparece)
+placar_do_jogo = criar_placar(modo_escolhido)  # Cria um OBJETO a partir da classe Placar
 chao_do_jogo = Chao(LARGURA_DA_TELA, ALTURA_DO_CHAO, TOPO_DO_CHAO)  # Cria um OBJETO a partir da classe Chao
 todos_os_canos = pygame.sprite.Group()  # Grupo só com os canos, para testar a batida do pássaro
 todos_os_objetos_do_jogo = pygame.sprite.Group(passaro_do_jogador)  # Grupo que atualiza e desenha o pássaro e os canos
 gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo, area_do_ceu, area_livre)  # Cria o OBJETO que decide quando aparecem os desafios de código
 
-# O jogo está sempre em UMA destas três situações (estados):
-#   "inicio"   -> tela de início, o pássaro fica parado batendo as asas esperando o jogador
-#   "jogando"  -> a partida está acontecendo
+# O jogo está sempre em UMA destas situações (estados):
+#   "inicio"   -> tela de início: o visitante escolhe o modo e o pássaro espera batendo as asas
+#   "jogando"  -> a partida de Flappy está acontecendo
+#   "nave"     -> Modo Nave: o shooter (quem cuida de tudo é o objeto modo_nave)
 #   "fim"      -> o pássaro bateu, a cena congela e aparece o fim de jogo
 estado_do_jogo = "inicio"  # Todo jogo começa na tela de início
 jogo_esta_rodando = True  # Enquanto for True, a janela continua aberta
@@ -101,6 +112,24 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
     for evento in pygame.event.get():  # Verifica tudo que aconteceu (teclas, cliques, fechar a janela, nosso evento)
         if evento.type == pygame.QUIT:  # Clicou no X da janela?
             jogo_esta_rodando = False
+        if estado_do_jogo == "nave":  # MODO NAVE: os eventos vão todos para o objeto do modo
+            if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
+                if modo_nave.usa_o_teclado():  # Com o editor aberto, ESC fecha o editor
+                    modo_nave.fechar_editor()
+                else:  # Senão, sai do jogo
+                    jogo_esta_rodando = False
+            else:
+                modo_nave.tratar_evento(evento)
+            continue
+        if estado_do_jogo == "inicio" and evento.type == pygame.KEYDOWN and evento.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_w, pygame.K_s, pygame.K_1, pygame.K_2):
+            if evento.key == pygame.K_1:  # Escolhe o modo de jogo
+                modo_escolhido = "desafios"
+            elif evento.key == pygame.K_2:
+                modo_escolhido = "nave"
+            else:  # Setas: troca de um para o outro
+                modo_escolhido = "nave" if modo_escolhido == "desafios" else "desafios"
+            placar_do_jogo = criar_placar(modo_escolhido)  # Mostra o recorde do modo escolhido
+            gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo, area_do_ceu, area_livre)
         # EDITOR ABERTO: o teclado é todo do editor (o espaço vira letra, não pulo). O mouse continua pulando.
         if estado_do_jogo == "jogando" and gerenciador_de_desafios.editor_recebe_teclado() and evento.type in (pygame.KEYDOWN, pygame.TEXTINPUT):
             if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:  # ESC fecha o editor (e não o jogo)
@@ -128,7 +157,9 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
                 todos_os_objetos_do_jogo.empty()  # Esvazia o grupo geral
                 passaro_do_jogador = Passaro(POSICAO_INICIAL_DO_PASSARO)  # Cria um pássaro NOVO, com os atributos do começo
                 todos_os_objetos_do_jogo.add(passaro_do_jogador)  # Coloca o pássaro novo no grupo geral
-                placar_do_jogo = Placar(area_livre.centerx)  # Cria um placar NOVO: pontos voltam a zero e o recorde é lido do arquivo
+                placar_do_jogo = criar_placar(modo_escolhido)  # Cria um placar NOVO: pontos voltam a zero e o recorde é lido do arquivo
+                modo_nave = None  # O Modo Nave (se teve) também recomeça do zero
+                painel_de_codigo.limpar_medidores()  # Cada modo mostra atributos diferentes no painel
                 gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo, area_do_ceu, area_livre)  # Desafios do zero: o próximo visitante vê os tutoriais
                 estado_do_jogo = "inicio"  # Volta para a tela de início
 
@@ -149,7 +180,8 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
             novos_canos = criar_par_de_canos(LARGURA_DA_TELA - distancia_desde_o_ultimo_cano, gerenciador_de_desafios.abertura_normal())  # Desconta o que passou, para o espaço entre os pares ficar sempre igual; a abertura diminui com o nível
             todos_os_canos.add(novos_canos)  # Coloca no grupo dos canos (para a batida)
             todos_os_objetos_do_jogo.add(novos_canos)  # E no grupo geral (para mover e desenhar)
-            gerenciador_de_desafios.novo_par_criado(novos_canos, passaro_do_jogador)  # Avisa o gerenciador: este par pode virar um desafio
+            if modo_escolhido == "desafios":  # No Modo Nave, o começo é um Flappy normal, sem desafios
+                gerenciador_de_desafios.novo_par_criado(novos_canos, passaro_do_jogador)  # Avisa o gerenciador: este par pode virar um desafio
 
         for cano in todos_os_canos:  # Olha cada cano que está na tela
             cano.animar(tempo_do_quadro)  # Desliza a borda e o deslocamento até o alvo (no tempo REAL, para ver o resultado na hora)
@@ -167,22 +199,39 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
             estado_do_jogo = "fim"  # Congela o jogo e passa a mostrar o fim de jogo
             momento_em_que_o_jogo_acabou = pygame.time.get_ticks()  # Anota a hora, para a pausa antes de recomeçar
             placar_do_jogo.registrar_fim_de_jogo()  # O placar confere e guarda o recorde
+        elif modo_escolhido == "nave" and placar_do_jogo.pontos >= PONTOS_ATE_A_NAVE:  # MODO NAVE: chegou a hora da nave aparecer!
+            modo_nave = ModoNave(passaro_do_jogador, todos_os_canos, chao_do_jogo, pedaco_do_fundo, area_do_ceu, area_livre, avisos_na_tela, placar_do_jogo)
+            painel_de_codigo.limpar_medidores()  # O painel passa a mostrar os atributos do Modo Nave
+            estado_do_jogo = "nave"
 
-    tela.blit(imagem_do_fundo, (0, 0))  # Desenha o fundo, apagando o quadro anterior
-    todos_os_objetos_do_jogo.draw(tela)  # Desenha cada objeto do grupo (usa o "image" e o "rect" deles)
-    tela.blit(chao_do_jogo.image, chao_do_jogo.rect)  # O chão é desenhado depois, para tampar a ponta de baixo dos canos
+    if estado_do_jogo == "nave":  # Modo Nave: o objeto do modo cuida de tudo
+        modo_nave.atualizar(tempo_do_quadro)
+        if modo_nave.acabou:  # O pássaro caiu (ou venceu o chefe final)
+            estado_do_jogo = "fim"
+            momento_em_que_o_jogo_acabou = pygame.time.get_ticks()
+            placar_do_jogo.registrar_fim_de_jogo()
+
+    if modo_nave:  # Modo Nave (jogando ou no fim): ele mesmo desenha o mundo
+        modo_nave.desenhar(tela)
+    else:
+        tela.blit(imagem_do_fundo, (0, 0))  # Desenha o fundo, apagando o quadro anterior
+        todos_os_objetos_do_jogo.draw(tela)  # Desenha cada objeto do grupo (usa o "image" e o "rect" deles)
+        tela.blit(chao_do_jogo.image, chao_do_jogo.rect)  # O chão é desenhado depois, para tampar a ponta de baixo dos canos
     if estado_do_jogo == "inicio":  # Qual texto mostrar depende do estado
-        placar_do_jogo.desenhar_tela_de_inicio(tela)  # Título, recorde e "Aperte ESPAÇO"
-    elif estado_do_jogo == "jogando":
+        placar_do_jogo.desenhar_tela_de_inicio(tela, modo_escolhido)  # Título, recorde, escolha do modo e "Aperte ESPAÇO"
+    elif estado_do_jogo in ("jogando", "nave"):
         placar_do_jogo.desenhar(tela)  # Só os pontos no topo, na frente dos canos
     else:  # estado "fim"
         placar_do_jogo.desenhar_fim_de_jogo(tela)  # A tela de fim de jogo por cima da cena congelada
 
     # MEDIDORES: o painel mostra os atributos que o visitante pode mudar com código, sempre com o valor de agora.
-    painel_de_codigo.mostrar_valor("canos.abertura", gerenciador_de_desafios.valor_para_o_medidor("canos.abertura", passaro_do_jogador, gerenciador_de_desafios.abertura_normal()), maximo_da_barra=120)
-    painel_de_codigo.mostrar_valor("canos.distancia", gerenciador_de_desafios.valor_para_o_medidor("canos.distancia", passaro_do_jogador, DISTANCIA_ENTRE_OS_CANOS), maximo_da_barra=150)
-    painel_de_codigo.mostrar_valor("passaro.forca_da_gravidade", passaro_do_jogador.forca_da_gravidade, maximo_da_barra=1000)
-    painel_de_codigo.mostrar_valor("passaro.forca_do_pulo", passaro_do_jogador.forca_do_pulo, maximo_da_barra=250)
+    if modo_nave:  # O Modo Nave mostra os atributos dele
+        modo_nave.atualizar_medidores(painel_de_codigo)
+    else:
+        painel_de_codigo.mostrar_valor("canos.abertura", gerenciador_de_desafios.valor_para_o_medidor("canos.abertura", passaro_do_jogador, gerenciador_de_desafios.abertura_normal()), maximo_da_barra=120)
+        painel_de_codigo.mostrar_valor("canos.distancia", gerenciador_de_desafios.valor_para_o_medidor("canos.distancia", passaro_do_jogador, DISTANCIA_ENTRE_OS_CANOS), maximo_da_barra=150)
+        painel_de_codigo.mostrar_valor("passaro.forca_da_gravidade", passaro_do_jogador.forca_da_gravidade, maximo_da_barra=1000)
+        painel_de_codigo.mostrar_valor("passaro.forca_do_pulo", passaro_do_jogador.forca_do_pulo, maximo_da_barra=250)
     painel_de_codigo.atualizar(tempo_do_quadro)  # Anima as barras (no tempo real)
     for aviso in avisos_na_tela:  # Anima os avisos (no tempo real)
         aviso.atualizar(tempo_do_quadro)
@@ -192,10 +241,16 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
     monitor.blit(jogo_ampliado, (0, 0))  # Cobre o monitor inteiro, apagando o quadro anterior
     if estado_do_jogo == "jogando":
         gerenciador_de_desafios.desenhar_no_jogo(monitor, area_do_jogo_no_monitor, fator_de_ampliacao, fonte_dos_avisos)  # Destaque do problema, dica de ENTER, prévia
+    if modo_nave:
+        modo_nave.desenhar_no_monitor(monitor, fator_de_ampliacao)  # XP, vida do chefe e as cartas (com texto nítido)
     for posicao_na_fila, aviso in enumerate(avisos_na_tela):  # Avisos por cima do jogo, um embaixo do outro, no meio da parte livre
         aviso.desenhar(monitor, area_livre_no_monitor, fonte_dos_avisos, posicao_na_fila)
-    editor_visivel = gerenciador_de_desafios.editor_para_mostrar() if estado_do_jogo == "jogando" else None  # O editor só aparece durante a partida
-    mensagem_do_painel = gerenciador_de_desafios.mensagem_do_painel() if estado_do_jogo == "jogando" else None  # Ex.: "Aperte ENTER para programar"
+    if modo_nave:  # No Modo Nave, o painel mostra o script das armas
+        editor_visivel = modo_nave.editor_para_mostrar()
+        mensagem_do_painel = modo_nave.mensagem_do_painel()
+    else:
+        editor_visivel = gerenciador_de_desafios.editor_para_mostrar() if estado_do_jogo == "jogando" else None  # O editor só aparece durante a partida
+        mensagem_do_painel = gerenciador_de_desafios.mensagem_do_painel() if estado_do_jogo == "jogando" else None  # Ex.: "Aperte ENTER para programar"
     painel_de_codigo.desenhar(monitor, editor_visivel, mensagem_do_painel)  # O painel é desenhado na resolução do monitor, por isso o texto fica nítido
     pygame.display.flip()  # Mostra na tela tudo que foi desenhado
 
