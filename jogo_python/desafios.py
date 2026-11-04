@@ -22,7 +22,12 @@ PRIMEIRO_DESAFIO_NO_PAR = 2  # O primeiro desafio aparece no 2º par de canos
 MENOR_INTERVALO_ENTRE_DESAFIOS = 2  # Depois de um desafio, o próximo vem entre 2...
 MAIOR_INTERVALO_ENTRE_DESAFIOS = 3  # ...e 3 pares de canos
 PARES_DE_ESPERA_DO_MESMO_DESAFIO = 4  # COOLDOWN: o mesmo desafio só volta depois de 4 pares
-SEGUNDOS_NO_EDITOR = 20  # Tempo para acertar o código (fora do tutorial)
+PONTOS_POR_NIVEL = 10  # A cada 10 pontos, o jogo sobe um nível de dificuldade
+NIVEL_MAXIMO = 3  # Níveis 0, 1, 2 e 3 (na tela aparecem como 1, 2, 3 e 4)
+ABERTURA_NORMAL_NO_FACIL = 80  # Abertura dos canos normais no nível mais fácil...
+ABERTURA_NORMAL_NO_DIFICIL = 68  # ...e no mais difícil
+SEGUNDOS_NO_EDITOR_NO_FACIL = 20  # Tempo para acertar o código (fora do tutorial) no nível mais fácil...
+SEGUNDOS_NO_EDITOR_NO_DIFICIL = 10  # ...e no mais difícil
 PONTOS_POR_DESAFIO = 2  # Bônus por resolver um desafio
 ESCALA_DO_TEMPO_EDITANDO = 0.15  # Câmera lenta enquanto o editor está aberto
 ESCALA_DO_TEMPO_DE_ALERTA = 0.5  # Câmera lenta leve quando o desafio aparece, para dar tempo de apertar ENTER
@@ -32,8 +37,7 @@ PARES_DE_DURACAO_DOS_EFEITOS = 3  # Gravidade pesada, pulo fraco e canos colados
 DISTANCIA_DOS_CANOS_COLADOS = 45  # Distância entre os pares no desafio dos canos colados (o cano tem 32 de largura: sobra quase nada)
 PASSOS_DA_PREVIA_DO_PULO = 24  # Quantos passos de futuro a prévia do pulo calcula
 TEMPO_DE_CADA_PASSO_DA_PREVIA = 1 / 30  # Cada passo da prévia vale 1/30 de segundo
-X_ONDE_O_CANO_FICA_VISIVEL = 112  # Um cano novo nasce em x = 144 (fora da tela); em 112 ele já aparece bem
-AREA_VISIVEL_DO_JOGO = pygame.Rect(0, 0, 144, 224)  # A tela do jogo acima do chão
+FOLGA_PARA_O_CANO_APARECER = 40  # O desafio só "aparece" quando o cano sai 40 pixels de trás do painel
 
 COR_DO_ALERTA = (255, 110, 110)  # Vermelho
 COR_DO_ACERTO = (120, 230, 120)  # Verde
@@ -50,7 +54,8 @@ class Desafio:
     #   alerta               -> texto do pop-up quando o desafio aparece
     #   explicacao           -> linhas do tutorial, mostradas na primeira vez
     #   pares_de_duracao     -> por quantos pares de canos o desafio dura (depois o jogo volta ao normal)
-    def __init__(self, objeto, atributo, minimo, maximo, alerta, explicacao, pares_de_duracao):
+    #   faixa_no_dificil     -> (mínimo, máximo) no nível mais difícil: a faixa aperta para o jogo não ficar fácil demais
+    def __init__(self, objeto, atributo, minimo, maximo, alerta, explicacao, pares_de_duracao, faixa_no_dificil):
         # ATRIBUTOS
         self.objeto = objeto
         self.atributo = atributo
@@ -59,6 +64,7 @@ class Desafio:
         self.alerta = alerta
         self.explicacao = explicacao
         self.pares_de_duracao = pares_de_duracao
+        self.minimo_no_dificil, self.maximo_no_dificil = faixa_no_dificil  # Separa a dupla em duas variáveis
         self.nivel_de_digitacao = 1  # 1 = só o valor; 2 = atributo e valor; 3 = a linha inteira
         self.pares = []  # Os pares de canos que fazem parte deste desafio (cada par é uma dupla: cano de cima, cano de baixo)
         self.passaro = None  # O pássaro da partida (guardado no começo do desafio)
@@ -89,7 +95,7 @@ class Desafio:
         if len(self.pares) < self.pares_de_duracao:
             self.pares.append(par_de_canos)
 
-    def esta_visivel(self):  # O problema já aparece na tela? (só então o alerta e o tutorial aparecem)
+    def esta_visivel(self, x_visivel):  # O problema já aparece na tela? "x_visivel": um cano à esquerda deste x já aparece bem
         return True
 
     def aplicar(self, valor, passaro):  # Usa o valor digitado pelo visitante
@@ -124,7 +130,7 @@ class DesafioCanosFechados(Desafio):
             "'canos' é um OBJETO do jogo e 'abertura' é um ATRIBUTO dele.",
             "O sinal = guarda um valor novo no atributo.",
             "Digite um número e aperte ENTER.",
-        ], pares_de_duracao=1)
+        ], pares_de_duracao=1, faixa_no_dificil=(56, 80))
         self.centro = 0.0
 
     # SOBRESCRITA: fecha o par de canos que acabou de nascer. Os canos deslizam até se encostarem.
@@ -135,8 +141,8 @@ class DesafioCanosFechados(Desafio):
         cano_de_cima.mudar_borda(self.centro)  # As duas bordas vão para o meio...
         cano_de_baixo.mudar_borda(self.centro)  # ...e os canos se fecham
 
-    def esta_visivel(self):
-        return self.pares[0][0].rect.x <= X_ONDE_O_CANO_FICA_VISIVEL
+    def esta_visivel(self, x_visivel):
+        return self.pares[0][0].rect.x <= x_visivel
 
     # Abre os canos com a abertura digitada, metade para cima e metade para baixo do meio.
     def aplicar(self, valor, passaro):
@@ -150,7 +156,7 @@ class DesafioCanosFechados(Desafio):
 
     def area_do_problema(self):
         cano_de_cima, cano_de_baixo = self.pares[0]
-        return cano_de_cima.rect.union(cano_de_baixo.rect).clip(AREA_VISIVEL_DO_JOGO)  # Só a parte que aparece na tela
+        return cano_de_cima.rect.union(cano_de_baixo.rect)
 
     # Contorno verde de onde a abertura vai ficar.
     def desenhar_previa(self, monitor, para_o_monitor, valor):
@@ -164,8 +170,8 @@ class DesafioCanosFechados(Desafio):
 class DesafioDoPassaro(Desafio):
 
     # "valor_ruim" é o valor que o atributo recebe quando o desafio começa (ex.: gravidade 800).
-    def __init__(self, atributo, valor_ruim, minimo, maximo, alerta, explicacao):
-        super().__init__("passaro", atributo, minimo, maximo, alerta, explicacao, pares_de_duracao=PARES_DE_DURACAO_DOS_EFEITOS)
+    def __init__(self, atributo, valor_ruim, minimo, maximo, faixa_no_dificil, alerta, explicacao):
+        super().__init__("passaro", atributo, minimo, maximo, alerta, explicacao, PARES_DE_DURACAO_DOS_EFEITOS, faixa_no_dificil)
         self.valor_ruim = valor_ruim
         self.valor_normal = None  # Guardado no começo, para voltar ao normal no fim
 
@@ -213,7 +219,7 @@ class DesafioCanosColados(Desafio):
             "'distancia' é o ATRIBUTO com o espaço entre um par de canos e o próximo.",
             "Quanto MAIOR o número, mais espaço para voar.",
             "Digite um número e aperte ENTER.",
-        ], pares_de_duracao=PARES_DE_DURACAO_DOS_EFEITOS)
+        ], pares_de_duracao=PARES_DE_DURACAO_DOS_EFEITOS, faixa_no_dificil=(80, 110))
         self.valor_aceito = None  # A distância digitada (None enquanto o visitante não acertar)
         self.ja_nasceu_o_par_depois_da_onda = False
 
@@ -238,8 +244,8 @@ class DesafioCanosColados(Desafio):
             return distancia_normal + self.pares[-1][0].deslocamento_alvo  # Para o par seguinte não nascer em cima do último da onda
         return distancia_normal
 
-    def esta_visivel(self):  # O problema aparece quando o 2º par (o primeiro colado) entra na tela
-        return len(self.pares) >= 2 and self.pares[1][0].rect.x <= X_ONDE_O_CANO_FICA_VISIVEL
+    def esta_visivel(self, x_visivel):  # O problema aparece quando o 2º par (o primeiro colado) aparece
+        return len(self.pares) >= 2 and self.pares[1][0].rect.x <= x_visivel
 
     # Empurra cada par da onda para a direita, para que fiquem a "valor" pixels um do outro (deslizando).
     def aplicar(self, valor, passaro):
@@ -259,33 +265,37 @@ class DesafioCanosColados(Desafio):
         area = self.pares[0][0].rect.union(self.pares[0][1].rect)
         for cano_de_cima, cano_de_baixo in self.pares[1:]:
             area = area.union(cano_de_cima.rect).union(cano_de_baixo.rect)
-        return area.clip(AREA_VISIVEL_DO_JOGO)
+        return area
 
     # Contornos verdes de onde cada par da onda vai ficar.
     def desenhar_previa(self, monitor, para_o_monitor, valor):
         for posicao_na_onda, (cano_de_cima, _) in enumerate(self.pares):
             x_final = cano_de_cima.posicao_horizontal + posicao_na_onda * (valor - DISTANCIA_DOS_CANOS_COLADOS)
-            lugar = pygame.Rect(round(x_final), 0, cano_de_cima.rect.width, AREA_VISIVEL_DO_JOGO.height)
+            lugar = pygame.Rect(round(x_final), 0, cano_de_cima.rect.width, cano_de_cima.rect.height * 2)  # Da altura da tela toda (o que passar é recortado)
             desenhar_retangulo_transparente(monitor, para_o_monitor(lugar), COR_DA_PREVIA)
 
 
 class GerenciadorDeDesafios:
 
     # CONSTRUTOR: recebe a lista de avisos (para mostrar pop-ups) e o placar (para dar o bônus).
+    #   area_do_ceu  -> retângulo da tela do jogo acima do chão
+    #   area_livre   -> a parte do céu que o painel não cobre (onde ficam as dicas)
     # Cada partida cria um gerenciador novo, então cada visitante vê os tutoriais desde o começo.
-    def __init__(self, avisos, placar):
+    def __init__(self, avisos, placar, area_do_ceu, area_livre):
         # ATRIBUTOS
         self.avisos = avisos
         self.placar = placar
+        self.area_do_ceu = area_do_ceu
+        self.area_livre = area_livre
         self.desafios = [  # Na ordem em que aparecem pela primeira vez
             DesafioCanosFechados(),
-            DesafioDoPassaro("forca_da_gravidade", 800, 350, 550, "GRAVIDADE PESADA!", [
+            DesafioDoPassaro("forca_da_gravidade", 800, 350, 550, (420, 550), "GRAVIDADE PESADA!", [
                 "A gravidade ficou pesada! O pássaro cai rápido demais.",
                 "'passaro' é um OBJETO e 'forca_da_gravidade' é um ATRIBUTO dele.",
                 "Quanto MENOR o número, mais devagar o pássaro cai.",
                 "Digite um número e aperte ENTER.",
             ]),
-            DesafioDoPassaro("forca_do_pulo", 110, 140, 190, "PULO FRACO!", [
+            DesafioDoPassaro("forca_do_pulo", 110, 140, 190, (140, 175), "PULO FRACO!", [
                 "O pulo ficou fraco! O pássaro quase não sobe.",
                 "'forca_do_pulo' é o ATRIBUTO com a força de cada pulo.",
                 "Quanto MAIOR o número, mais alto o pássaro pula.",
@@ -311,6 +321,7 @@ class GerenciadorDeDesafios:
         #   "comemorando" -> jogo parado um instante, mostrando o resultado
         self.etapa_do_tutorial = None
         self.tempo_total = 0.0  # Relógio para as animações (piscar e pulsar)
+        self.nivel_anunciado = 0  # Último nível de dificuldade avisado ao visitante
 
     # MÉTODOS
 
@@ -344,11 +355,14 @@ class GerenciadorDeDesafios:
     # Chamado a cada quadro com o tempo REAL.
     def atualizar(self, tempo_real, passaro):
         self.tempo_total += tempo_real
+        if self.nivel_de_dificuldade() > self.nivel_anunciado:  # Subiu de nível: avisa (deixar claro que algo mudou)
+            self.nivel_anunciado = self.nivel_de_dificuldade()
+            self.avisos.append(Aviso(f"NÍVEL {self.nivel_anunciado + 1}: O JOGO APERTOU!", COR_DA_DICA, segundos=3.5))
         desafio = self.desafio_ativo
         if desafio is None:
             return
 
-        if not self.ja_alertou and desafio.esta_visivel():  # O problema acabou de aparecer na tela
+        if not self.ja_alertou and desafio.esta_visivel(self.area_livre.right - FOLGA_PARA_O_CANO_APARECER):  # O problema acabou de aparecer (saiu de trás do painel)
             self.ja_alertou = True
             self.avisos.append(Aviso(desafio.alerta, COR_DO_ALERTA))
             if self.etapa_do_tutorial == "esperando":
@@ -415,9 +429,11 @@ class GerenciadorDeDesafios:
         if self.editor is None:  # Primeira vez neste desafio: cria o editor
             no_tutorial = self.etapa_do_tutorial == "mostrando"
             self.editor = EditorDeCodigo(
-                desafio.objeto, desafio.atributo, desafio.minimo, desafio.maximo, desafio.codigo_pronto(),
+                desafio.objeto, desafio.atributo,
+                self.misturar(desafio.minimo, desafio.minimo_no_dificil), self.misturar(desafio.maximo, desafio.maximo_no_dificil),  # A faixa aperta com o nível
+                desafio.codigo_pronto(),
                 desafio.explicacao if no_tutorial else desafio.dica(),
-                None if no_tutorial else SEGUNDOS_NO_EDITOR,  # No tutorial não tem limite de tempo
+                None if no_tutorial else self.misturar(SEGUNDOS_NO_EDITOR_NO_FACIL, SEGUNDOS_NO_EDITOR_NO_DIFICIL),  # No tutorial não tem limite de tempo
             )
         self.editor_aberto = True
         if self.etapa_do_tutorial == "mostrando":
@@ -466,6 +482,18 @@ class GerenciadorDeDesafios:
             return self.desafio_ativo.distancia_ate_o_proximo_par(distancia_normal)
         return distancia_normal
 
+    # DIFICULDADE ADAPTATIVA: o nível sobe com os pontos (0 a 9 pontos = nível 0, 10 a 19 = nível 1...).
+    def nivel_de_dificuldade(self):
+        return min(NIVEL_MAXIMO, self.placar.pontos // PONTOS_POR_NIVEL)
+
+    # Escolhe um valor entre o do nível fácil e o do difícil, de acordo com o nível atual.
+    # Ex.: misturar(80, 68) dá 80 no nível 0, 76 no 1, 72 no 2 e 68 no 3.
+    def misturar(self, valor_no_facil, valor_no_dificil):
+        return round(valor_no_facil + (valor_no_dificil - valor_no_facil) * self.nivel_de_dificuldade() / NIVEL_MAXIMO)
+
+    def abertura_normal(self):  # Abertura dos canos que não são desafio
+        return self.misturar(ABERTURA_NORMAL_NO_FACIL, ABERTURA_NORMAL_NO_DIFICIL)
+
     # O valor que o medidor do painel deve mostrar: durante o desafio, o valor do desafio; fora dele, o normal.
     def valor_para_o_medidor(self, nome_no_codigo, passaro, valor_normal):
         desafio = self.desafio_ativo
@@ -485,14 +513,15 @@ class GerenciadorDeDesafios:
 
         if not self.resolvido:
             area_do_problema = desafio.area_do_problema()
+            ceu_no_monitor = para_o_monitor(self.area_do_ceu)  # Destaques e prévias ficam só no céu (não passam por cima do chão)
             if area_do_problema:  # Contorno amarelo pulsando em volta do problema
                 pulso = (math.sin(self.tempo_total * 8) + 1) / 2  # Vai e volta entre 0 e 1, umas 1,3 vezes por segundo
-                monitor.set_clip(area_do_jogo)
-                pygame.draw.rect(monitor, COR_DA_DICA, para_o_monitor(area_do_problema).inflate(8, 8), width=2 + round(4 * pulso), border_radius=6)
+                monitor.set_clip(ceu_no_monitor)
+                pygame.draw.rect(monitor, COR_DA_DICA, para_o_monitor(area_do_problema.clip(self.area_do_ceu)).inflate(8, 8), width=2 + round(4 * pulso), border_radius=6)
                 monitor.set_clip(None)
 
             if self.editor_aberto and self.editor.valor_da_previa is not None:  # Prévia ao vivo do que o visitante está digitando
-                monitor.set_clip(area_do_jogo)
+                monitor.set_clip(ceu_no_monitor)
                 desafio.desenhar_previa(monitor, para_o_monitor, self.editor.valor_da_previa)
                 monitor.set_clip(None)
 
@@ -505,7 +534,8 @@ class GerenciadorDeDesafios:
                     texto, cor = "ENTER = programar", COR_DA_DICA
                 if self.etapa_do_tutorial == "mostrando" or self.tempo_total % 0.8 < 0.55:
                     caixa = criar_caixa(texto, cor, fonte)
-                    monitor.blit(caixa, caixa.get_rect(midbottom=(area_do_jogo.centerx, area_do_jogo.bottom - 40 * fator_de_ampliacao)))
+                    livre_no_monitor = para_o_monitor(self.area_livre)
+                    monitor.blit(caixa, caixa.get_rect(midbottom=(livre_no_monitor.centerx, livre_no_monitor.bottom - 16 * fator_de_ampliacao)))  # No meio da parte livre, acima do chão
 
 
 # MÉTODO AUXILIAR: um retângulo verde transparente com borda (para as prévias).

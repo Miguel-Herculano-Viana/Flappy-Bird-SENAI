@@ -7,7 +7,7 @@ from pathlib import Path  # Ferramenta do Python para montar caminhos de arquivo
 import pygame  # Biblioteca de jogos que estamos usando
 
 CAMINHO_DA_IMAGEM_DO_CANO = Path(__file__).parent.parent / "src" / "assets" / "cano.png"  # Desenho do cano (32x256, com a "tampa" em cima)
-VELOCIDADE_DO_CENARIO = 60.0  # Quantos pixels por segundo os canos (e o chão) andam para a esquerda
+VELOCIDADE_DO_CENARIO = 50.0  # Quantos pixels por segundo os canos (e o chão) andam para a esquerda (devagar: o foco é programar, não desviar)
 VELOCIDADE_DA_ANIMACAO = 8.0  # Quão rápido o cano desliza até a posição nova (maior = mais rápido; 8 leva uns 0,4 segundo)
 
 

@@ -16,7 +16,7 @@ COR_DA_LACUNA = (55, 60, 85)  # Fundo da parte que o visitante deve digitar
 COR_DO_CURSOR = (255, 255, 255)  # Branco
 COR_DO_ERRO = (255, 110, 110)  # Vermelho
 COR_DO_ACERTO = (120, 230, 120)  # Verde
-COR_DA_DICA = (110, 160, 110)  # Verde apagado, como os comentários (#) nos editores
+COR_DA_DICA = (140, 200, 130)  # Verde claro, como os comentários (#) nos editores (o mesmo do painel)
 COR_DA_BARRA_DE_TEMPO = (255, 200, 60)  # Amarelo
 COR_DO_FUNDO_DA_BARRA = (55, 60, 85)  # Cinza azulado
 

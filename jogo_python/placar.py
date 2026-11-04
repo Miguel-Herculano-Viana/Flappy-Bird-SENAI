@@ -17,9 +17,11 @@ DISTANCIA_DO_TOPO_DA_TELA = 16  # Quantos pixels abaixo do topo os pontos ficam 
 
 class Placar:
 
-    # CONSTRUTOR: todo placar novo começa com zero pontos e lê o recorde guardado no arquivo
-    def __init__(self):
+    # CONSTRUTOR: todo placar novo começa com zero pontos e lê o recorde guardado no arquivo.
+    # "centro_horizontal" é onde os textos ficam centralizados (no meio da parte da tela que o painel não cobre).
+    def __init__(self, centro_horizontal):
         # ATRIBUTOS
+        self.centro_horizontal = centro_horizontal
         self.pontos = 0  # Quantos canos o jogador já passou nesta partida
         self.bateu_o_recorde = False  # Vira True se esta partida passar o recorde
         self.fonte_grande = pygame.font.Font(None, TAMANHO_DA_FONTE_GRANDE)  # Fonte das letras grandes ("None" = fonte padrão do pygame)
@@ -65,6 +67,6 @@ class Placar:
     def desenhar_texto_com_sombra(self, tela, texto, fonte, cor, distancia_do_topo):
         imagem_da_sombra = fonte.render(texto, True, COR_DA_SOMBRA)  # Transforma o texto em uma imagem preta
         imagem_do_texto = fonte.render(texto, True, cor)  # E em uma imagem colorida
-        posicao_do_texto = imagem_do_texto.get_rect(midtop=(tela.get_width() // 2, distancia_do_topo))  # Centralizado na horizontal
+        posicao_do_texto = imagem_do_texto.get_rect(midtop=(self.centro_horizontal, distancia_do_topo))  # Centralizado na horizontal
         tela.blit(imagem_da_sombra, posicao_do_texto.move(1, 1))  # Desenha a sombra 1 pixel para baixo e para a direita
         tela.blit(imagem_do_texto, posicao_do_texto)  # Desenha o texto por cima

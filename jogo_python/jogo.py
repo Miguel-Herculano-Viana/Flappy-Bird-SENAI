@@ -13,28 +13,26 @@ from painel import Painel  # Importa a CLASSE Painel do arquivo painel.py
 from passaro import Passaro  # Importa a CLASSE Passaro do arquivo passaro.py
 from placar import Placar  # Importa a CLASSE Placar do arquivo placar.py
 
-LARGURA_DA_TELA = 144  # Largura do jogo em pixels (depois ampliamos para caber no monitor)
-ALTURA_DA_TELA = 256  # Altura do jogo em pixels
+ALTURA_MINIMA_DA_TELA = 256  # O jogo tem pelo menos 256 pixels de altura (a largura e a altura certas dependem do monitor)
 ALTURA_DO_CHAO = 32  # Altura da faixa de chão no pé da tela
-TOPO_DO_CHAO = ALTURA_DA_TELA - ALTURA_DO_CHAO  # Altura da tela onde o chão começa
-CAMINHO_DA_IMAGEM_DO_FUNDO = Path(__file__).parent.parent / "src" / "assets" / "fundo.png"  # Céu com nuvens e cidade (144x224, tudo acima do chão)
+CAMINHO_DA_IMAGEM_DO_FUNDO = Path(__file__).parent.parent / "src" / "assets" / "fundo.png"  # Céu com nuvens e cidade (144x224); é repetido na largura da tela
 QUADROS_POR_SEGUNDO = 60  # Quantas vezes por segundo a tela é redesenhada
-POSICAO_INICIAL_DO_PASSARO = (48, 112)  # Onde o pássaro aparece no começo do jogo
-TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS = 64  # Altura do espaço por onde o pássaro passa
+POSICAO_HORIZONTAL_DO_PASSARO = 48  # Onde o pássaro fica na horizontal
 DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA = 48  # Para a abertura não ficar colada no topo ou no chão
-DISTANCIA_ENTRE_OS_CANOS = 90  # Um novo par de canos aparece a cada 90 pixels que o cenário anda
+DISTANCIA_ENTRE_OS_CANOS = 100  # Um novo par de canos aparece a cada 100 pixels que o cenário anda
 ESCALA_DO_TEMPO_NORMAL = 1.0  # Velocidade normal do jogo (1.0 = tempo real; 0.5 seria metade da velocidade)
 MILISSEGUNDOS_DE_ESPERA_PARA_RECOMECAR = 600  # Pausa no fim de jogo, para quem está apertando espaço sem parar conseguir ver o resultado
-MARGEM_DO_PAINEL = 32  # Espaço em pixels do monitor entre o jogo, o painel de código e a borda
-LARGURA_MAXIMA_DO_PAINEL = 900  # Em monitores muito largos o painel não passa disso
-COR_EM_VOLTA_DO_JOGO = (16, 18, 28)  # Azul quase preto, no espaço do monitor que sobra em volta do jogo e do painel
+MARGEM_DO_PAINEL = 8  # Espaço (em pixels do jogo) entre o painel e a borda da tela
+PARTE_DA_TELA_DO_PAINEL = 0.4  # O painel ocupa 40% da largura da tela...
+LARGURA_MAXIMA_DO_PAINEL = 900  # ...mas, em monitores muito largos, não passa de 900 pixels do monitor
 TAMANHO_DA_LETRA_DOS_AVISOS = 7  # Em pixels do jogo (é multiplicado pelo fator de ampliação)
 
 
 # Cria dois objetos Cano (o de cima e o de baixo) com uma abertura sorteada entre eles.
-def criar_par_de_canos(posicao_horizontal):
+# "tamanho_da_abertura" é a altura do espaço por onde o pássaro passa.
+def criar_par_de_canos(posicao_horizontal, tamanho_da_abertura):
     centro_da_abertura = random.randint(DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA, TOPO_DO_CHAO - DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA)  # Sorteia a altura da abertura (entre o topo e o chão)
-    metade_da_abertura = TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS // 2  # Metade para cima do centro, metade para baixo
+    metade_da_abertura = tamanho_da_abertura // 2  # Metade para cima do centro, metade para baixo
     cano_de_cima = Cano(posicao_horizontal, centro_da_abertura - metade_da_abertura, fica_em_cima=True)  # Nasce na posição pedida (perto da borda direita da tela)
     cano_de_baixo = Cano(posicao_horizontal, centro_da_abertura + metade_da_abertura, fica_em_cima=False)  # Mesmo molde, atributos diferentes
     return cano_de_cima, cano_de_baixo  # Devolve os dois objetos criados
@@ -43,30 +41,46 @@ def criar_par_de_canos(posicao_horizontal):
 pygame.init()  # Liga o pygame
 monitor = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)  # Tela cheia, no tamanho real do monitor ("0, 0" = use o tamanho do monitor)
 pygame.display.set_caption("Flappy Bird SENAI")  # Título da janela
-tela = pygame.Surface((LARGURA_DA_TELA, ALTURA_DA_TELA))  # O jogo é desenhado nesta imagem pequena (144x256) e depois ampliado para o monitor
 
 # AMPLIAÇÃO POR UM NÚMERO INTEIRO: cada pixel do jogo vira um quadrado de "fator x fator" pixels no monitor.
 # Com um número quebrado (ex.: 4,2) uns pixels ficariam maiores que outros e a pixel art ficaria torta.
-fator_de_ampliacao = max(1, monitor.get_height() // ALTURA_DA_TELA)  # Ex.: 1080 // 256 = 4
-tamanho_do_jogo_no_monitor = (LARGURA_DA_TELA * fator_de_ampliacao, ALTURA_DA_TELA * fator_de_ampliacao)  # Ex.: 576x1024
-espaco_livre_ao_lado = monitor.get_width() - tamanho_do_jogo_no_monitor[0]  # Largura que sobra do lado do jogo
-largura_do_painel = min(espaco_livre_ao_lado - 3 * MARGEM_DO_PAINEL, LARGURA_MAXIMA_DO_PAINEL)  # O painel usa o espaço que sobra, sem ficar largo demais
-esquerda_do_jogo = (monitor.get_width() - tamanho_do_jogo_no_monitor[0] - largura_do_painel - MARGEM_DO_PAINEL) // 2  # Jogo + painel ficam centralizados juntos
-topo_do_jogo = (monitor.get_height() - tamanho_do_jogo_no_monitor[1]) // 2  # Centralizado na vertical
-area_do_jogo_no_monitor = pygame.Rect((esquerda_do_jogo, topo_do_jogo), tamanho_do_jogo_no_monitor)  # Onde o jogo ampliado aparece
-painel_de_codigo = Painel(pygame.Rect(area_do_jogo_no_monitor.right + MARGEM_DO_PAINEL, topo_do_jogo, largura_do_painel, tamanho_do_jogo_no_monitor[1]))  # Painel do lado direito do jogo
+fator_de_ampliacao = max(1, monitor.get_height() // ALTURA_MINIMA_DA_TELA)  # Ex.: 1080 // 256 = 4
+# O TAMANHO DA TELA DO JOGO sai do monitor: o jogo ampliado cobre o monitor inteiro, sem faixas pretas.
+# "-(-a // b)" é a divisão arredondando para CIMA (para não sobrar nenhuma faixinha sem desenho).
+LARGURA_DA_TELA = -(-monitor.get_width() // fator_de_ampliacao)  # Ex.: 1920 / 4 = 480
+ALTURA_DA_TELA = -(-monitor.get_height() // fator_de_ampliacao)  # Ex.: 1080 / 4 = 270
+TOPO_DO_CHAO = ALTURA_DA_TELA - ALTURA_DO_CHAO  # Altura da tela onde o chão começa
+tela = pygame.Surface((LARGURA_DA_TELA, ALTURA_DA_TELA))  # O jogo é desenhado nesta imagem pequena e depois ampliado para o monitor
+jogo_ampliado = pygame.Surface((LARGURA_DA_TELA * fator_de_ampliacao, ALTURA_DA_TELA * fator_de_ampliacao))  # Onde a imagem ampliada é guardada a cada quadro
+area_do_jogo_no_monitor = jogo_ampliado.get_rect()  # O jogo começa no canto de cima do monitor e cobre tudo
+
+# PAINEL flutuando por cima do jogo, no canto direito, acima do chão (o chão passa por baixo dele)
+margem_no_monitor = MARGEM_DO_PAINEL * fator_de_ampliacao
+largura_do_painel = min(round(monitor.get_width() * PARTE_DA_TELA_DO_PAINEL), LARGURA_MAXIMA_DO_PAINEL)
+painel_de_codigo = Painel(pygame.Rect(monitor.get_width() - largura_do_painel - margem_no_monitor, margem_no_monitor,
+                                      largura_do_painel, TOPO_DO_CHAO * fator_de_ampliacao - 2 * margem_no_monitor), fator_de_ampliacao)
+area_do_ceu = pygame.Rect(0, 0, LARGURA_DA_TELA, TOPO_DO_CHAO)  # Na tela do jogo: tudo acima do chão
+area_livre = pygame.Rect(0, 0, painel_de_codigo.retangulo.x // fator_de_ampliacao, TOPO_DO_CHAO)  # A parte do céu que o painel não cobre
+area_livre_no_monitor = pygame.Rect(0, 0, painel_de_codigo.retangulo.x, TOPO_DO_CHAO * fator_de_ampliacao)  # A mesma parte, no monitor
+POSICAO_INICIAL_DO_PASSARO = (POSICAO_HORIZONTAL_DO_PASSARO, TOPO_DO_CHAO // 2)  # O pássaro começa no meio da altura do céu
 fonte_dos_avisos = pygame.font.SysFont("consolas", TAMANHO_DA_LETRA_DOS_AVISOS * fator_de_ampliacao, bold=True)  # Letra dos avisos, proporcional ao tamanho do jogo no monitor
 avisos_na_tela = []  # LISTA dos avisos (objetos Aviso) que estão aparecendo agora
 
-imagem_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência, ele cobre tudo)
+# FUNDO: a imagem tem só 144 pixels de largura, então é repetida lado a lado até cobrir a tela,
+# com o pé encostado no chão. O que sobra em cima é pintado com a cor do céu (a cor do topo da imagem).
+pedaco_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência)
+imagem_do_fundo = pygame.Surface((LARGURA_DA_TELA, TOPO_DO_CHAO))
+imagem_do_fundo.fill(pedaco_do_fundo.get_at((0, 0)))  # Cor do céu
+for esquerda_do_pedaco in range(0, LARGURA_DA_TELA, pedaco_do_fundo.get_width()):  # Um pedaço a cada 144 pixels
+    imagem_do_fundo.blit(pedaco_do_fundo, (esquerda_do_pedaco, TOPO_DO_CHAO - pedaco_do_fundo.get_height()))
 relogio = pygame.time.Clock()  # Relógio que controla a velocidade do jogo
 
 passaro_do_jogador = Passaro(POSICAO_INICIAL_DO_PASSARO)  # Cria um OBJETO a partir da classe Passaro
-placar_do_jogo = Placar()  # Cria um OBJETO a partir da classe Placar
+placar_do_jogo = Placar(area_livre.centerx)  # Cria um OBJETO a partir da classe Placar (textos no meio da parte livre)
 chao_do_jogo = Chao(LARGURA_DA_TELA, ALTURA_DO_CHAO, TOPO_DO_CHAO)  # Cria um OBJETO a partir da classe Chao
 todos_os_canos = pygame.sprite.Group()  # Grupo só com os canos, para testar a batida do pássaro
 todos_os_objetos_do_jogo = pygame.sprite.Group(passaro_do_jogador)  # Grupo que atualiza e desenha o pássaro e os canos
-gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo)  # Cria o OBJETO que decide quando aparecem os desafios de código
+gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo, area_do_ceu, area_livre)  # Cria o OBJETO que decide quando aparecem os desafios de código
 
 # O jogo está sempre em UMA destas três situações (estados):
 #   "inicio"   -> tela de início, o pássaro fica parado batendo as asas esperando o jogador
@@ -114,8 +128,8 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
                 todos_os_objetos_do_jogo.empty()  # Esvazia o grupo geral
                 passaro_do_jogador = Passaro(POSICAO_INICIAL_DO_PASSARO)  # Cria um pássaro NOVO, com os atributos do começo
                 todos_os_objetos_do_jogo.add(passaro_do_jogador)  # Coloca o pássaro novo no grupo geral
-                placar_do_jogo = Placar()  # Cria um placar NOVO: pontos voltam a zero e o recorde é lido do arquivo
-                gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo)  # Desafios do zero: o próximo visitante vê os tutoriais
+                placar_do_jogo = Placar(area_livre.centerx)  # Cria um placar NOVO: pontos voltam a zero e o recorde é lido do arquivo
+                gerenciador_de_desafios = GerenciadorDeDesafios(avisos_na_tela, placar_do_jogo, area_do_ceu, area_livre)  # Desafios do zero: o próximo visitante vê os tutoriais
                 estado_do_jogo = "inicio"  # Volta para a tela de início
 
     if estado_do_jogo == "inicio":  # Na tela de início, o pássaro só bate as asas, sem cair
@@ -132,7 +146,7 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         distancia_ate_o_proximo_par = gerenciador_de_desafios.distancia_ate_o_proximo_par(DISTANCIA_ENTRE_OS_CANOS)  # Normalmente 90, mas um desafio pode mudar
         if distancia_desde_o_ultimo_cano >= distancia_ate_o_proximo_par:  # Já andou o suficiente para um novo par?
             distancia_desde_o_ultimo_cano -= distancia_ate_o_proximo_par  # Guarda só o que passou da conta
-            novos_canos = criar_par_de_canos(LARGURA_DA_TELA - distancia_desde_o_ultimo_cano)  # Desconta o que passou, para o espaço entre os pares ficar sempre igual
+            novos_canos = criar_par_de_canos(LARGURA_DA_TELA - distancia_desde_o_ultimo_cano, gerenciador_de_desafios.abertura_normal())  # Desconta o que passou, para o espaço entre os pares ficar sempre igual; a abertura diminui com o nível
             todos_os_canos.add(novos_canos)  # Coloca no grupo dos canos (para a batida)
             todos_os_objetos_do_jogo.add(novos_canos)  # E no grupo geral (para mover e desenhar)
             gerenciador_de_desafios.novo_par_criado(novos_canos, passaro_do_jogador)  # Avisa o gerenciador: este par pode virar um desafio
@@ -165,7 +179,7 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         placar_do_jogo.desenhar_fim_de_jogo(tela)  # A tela de fim de jogo por cima da cena congelada
 
     # MEDIDORES: o painel mostra os atributos que o visitante pode mudar com código, sempre com o valor de agora.
-    painel_de_codigo.mostrar_valor("canos.abertura", gerenciador_de_desafios.valor_para_o_medidor("canos.abertura", passaro_do_jogador, TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS), maximo_da_barra=120)
+    painel_de_codigo.mostrar_valor("canos.abertura", gerenciador_de_desafios.valor_para_o_medidor("canos.abertura", passaro_do_jogador, gerenciador_de_desafios.abertura_normal()), maximo_da_barra=120)
     painel_de_codigo.mostrar_valor("canos.distancia", gerenciador_de_desafios.valor_para_o_medidor("canos.distancia", passaro_do_jogador, DISTANCIA_ENTRE_OS_CANOS), maximo_da_barra=150)
     painel_de_codigo.mostrar_valor("passaro.forca_da_gravidade", passaro_do_jogador.forca_da_gravidade, maximo_da_barra=1000)
     painel_de_codigo.mostrar_valor("passaro.forca_do_pulo", passaro_do_jogador.forca_do_pulo, maximo_da_barra=250)
@@ -174,12 +188,12 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         aviso.atualizar(tempo_do_quadro)
     avisos_na_tela[:] = [aviso for aviso in avisos_na_tela if not aviso.acabou()]  # Tira da lista os avisos que já sumiram ("[:]" troca o conteúdo da MESMA lista, que o gerenciador também usa)
 
-    monitor.fill(COR_EM_VOLTA_DO_JOGO)  # Pinta o monitor inteiro, apagando o quadro anterior
-    pygame.transform.scale(tela, tamanho_do_jogo_no_monitor, monitor.subsurface(area_do_jogo_no_monitor))  # Amplia o jogo pequeno direto no lugar dele no monitor
-    for posicao_na_fila, aviso in enumerate(avisos_na_tela):  # Avisos por cima do jogo, um embaixo do outro
-        aviso.desenhar(monitor, area_do_jogo_no_monitor, fonte_dos_avisos, posicao_na_fila)
+    pygame.transform.scale(tela, jogo_ampliado.get_size(), jogo_ampliado)  # Amplia o jogo pequeno (cada pixel vira um quadrado)
+    monitor.blit(jogo_ampliado, (0, 0))  # Cobre o monitor inteiro, apagando o quadro anterior
     if estado_do_jogo == "jogando":
         gerenciador_de_desafios.desenhar_no_jogo(monitor, area_do_jogo_no_monitor, fator_de_ampliacao, fonte_dos_avisos)  # Destaque do problema, dica de ENTER, prévia
+    for posicao_na_fila, aviso in enumerate(avisos_na_tela):  # Avisos por cima do jogo, um embaixo do outro, no meio da parte livre
+        aviso.desenhar(monitor, area_livre_no_monitor, fonte_dos_avisos, posicao_na_fila)
     editor_visivel = gerenciador_de_desafios.editor_para_mostrar() if estado_do_jogo == "jogando" else None  # O editor só aparece durante a partida
     mensagem_do_painel = gerenciador_de_desafios.mensagem_do_painel() if estado_do_jogo == "jogando" else None  # Ex.: "Aperte ENTER para programar"
     painel_de_codigo.desenhar(monitor, editor_visivel, mensagem_do_painel)  # O painel é desenhado na resolução do monitor, por isso o texto fica nítido
