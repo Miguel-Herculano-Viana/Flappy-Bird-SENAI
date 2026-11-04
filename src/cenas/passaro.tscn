@@ -1,0 +1,61 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/scripts/passaro.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://src/assets/Bird_1.png" id="2_textura"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_quadro1"]
+atlas = ExtResource("2_textura")
+region = Rect2(0, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_quadro2"]
+atlas = ExtResource("2_textura")
+region = Rect2(32, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_quadro3"]
+atlas = ExtResource("2_textura")
+region = Rect2(64, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_quadro4"]
+atlas = ExtResource("2_textura")
+region = Rect2(96, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_quadro5"]
+atlas = ExtResource("2_textura")
+region = Rect2(128, 0, 32, 32)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_passaro"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_quadro1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_quadro2")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_quadro3")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_quadro4")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_quadro5")
+}],
+"loop": true,
+"name": &"batendo_asas",
+"speed": 10.0
+}]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_passaro"]
+radius = 6.0
+
+[node name="Passaro" type="CharacterBody2D"]
+script = ExtResource("1_script")
+
+[node name="AnimacaoDoPassaro" type="AnimatedSprite2D" parent="."]
+sprite_frames = SubResource("SpriteFrames_passaro")
+animation = &"batendo_asas"
+autoplay = "batendo_asas"
+
+[node name="AreaDeColisao" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_passaro")
