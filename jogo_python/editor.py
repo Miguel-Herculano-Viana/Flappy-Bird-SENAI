@@ -7,16 +7,11 @@
 # "objeto.atributo = número". Qualquer outra coisa vira uma mensagem de erro, como o Python de verdade faria.
 
 import ast  # Ferramenta do Python que lê código sem executar
-import re  # Ferramenta do Python para achar padrões em textos (usada para colorir o código)
 
 import pygame  # Biblioteca de jogos que estamos usando
 
 MAXIMO_DE_CARACTERES = 60  # Tamanho máximo da linha, para ninguém colar um texto gigante
 SEGUNDOS_PERDIDOS_POR_ERRO = 2.0  # Cada tentativa errada desconta este tempo do relógio do editor
-COR_DO_NOME = (120, 190, 255)  # Azul, para nomes (canos, abertura...)
-COR_DO_NUMERO = (245, 165, 90)  # Laranja, para números
-COR_DO_SINAL = (230, 230, 240)  # Branco, para = . e outros sinais
-COR_DO_PROMPT = (120, 125, 145)  # Cinza, para o ">>>" do começo da linha
 COR_DA_LACUNA = (55, 60, 85)  # Fundo da parte que o visitante deve digitar
 COR_DO_CURSOR = (255, 255, 255)  # Branco
 COR_DO_ERRO = (255, 110, 110)  # Vermelho
@@ -177,8 +172,8 @@ class EditorDeCodigo:
         x_da_lacuna = esquerda + len(">>> " + self.codigo_pronto) * largura_da_letra
         largura_da_lacuna = max(len(self.texto_digitado) + 1, 4) * largura_da_letra  # Sempre um pouco mais larga que o texto
         pygame.draw.rect(monitor, COR_DA_LACUNA, (x_da_lacuna - 2, y - 2, largura_da_lacuna + 4, altura), border_radius=4)
-        self.escrever_colorido(monitor, painel, ">>> ", esquerda, y, so_prompt=True)
-        self.escrever_colorido(monitor, painel, self.linha_completa(), esquerda + 4 * largura_da_letra, y)
+        painel.escrever_colorido(monitor, ">>> ", esquerda, y, so_prompt=True)  # O ">>>" do Python, em cinza
+        painel.escrever_colorido(monitor, self.linha_completa(), esquerda + 4 * largura_da_letra, y)  # O código, colorido
         if self.valor_aceito is None and self.tempo_do_cursor % 1.0 < 0.5:  # Cursor pisca: meio segundo aceso, meio apagado
             x_do_cursor = x_da_lacuna + self.posicao_do_cursor * largura_da_letra
             pygame.draw.rect(monitor, COR_DO_CURSOR, (x_do_cursor, y, 2, altura * 4 // 5))
@@ -199,21 +194,6 @@ class EditorDeCodigo:
         fracao = max(0.0, self.segundos_restantes / self.segundos_totais)
         pygame.draw.rect(monitor, COR_DO_FUNDO_DA_BARRA, (esquerda, y, largura_total, altura // 3), border_radius=4)
         pygame.draw.rect(monitor, COR_DA_BARRA_DE_TEMPO, (esquerda, y, round(largura_total * fracao), altura // 3), border_radius=4)
-
-    # MÉTODO AUXILIAR: escreve código com cores diferentes para nomes, números e sinais (como um editor de verdade).
-    def escrever_colorido(self, monitor, painel, texto, x, y, so_prompt=False):
-        largura_da_letra = painel.fonte.size("a")[0]
-        for pedaco in re.findall(r"\d+\.?\d*|\w+|\s+|.", texto):  # Separa em números, palavras, espaços e sinais
-            if so_prompt:
-                cor = COR_DO_PROMPT
-            elif pedaco[0].isdigit():
-                cor = COR_DO_NUMERO
-            elif pedaco[0].isalpha() or pedaco[0] == "_":
-                cor = COR_DO_NOME
-            else:
-                cor = COR_DO_SINAL
-            monitor.blit(painel.fonte.render(pedaco, True, cor), (x, y))
-            x += len(pedaco) * largura_da_letra
 
 
 # SELF-CHECK: rode "python editor.py" para conferir se a validação aceita e recusa as linhas certas.

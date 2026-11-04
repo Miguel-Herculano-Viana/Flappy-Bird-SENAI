@@ -5,6 +5,7 @@ from pathlib import Path  # Ferramenta do Python para montar caminhos de arquivo
 
 import pygame  # Biblioteca de jogos que estamos usando
 
+from avisos import Aviso  # Importa a CLASSE Aviso do arquivo avisos.py
 from cano import VELOCIDADE_DO_CENARIO, Cano  # Importa a CLASSE Cano (e a velocidade dos canos) do arquivo cano.py
 from chao import Chao  # Importa a CLASSE Chao do arquivo chao.py
 from painel import Painel  # Importa a CLASSE Painel do arquivo painel.py
@@ -26,6 +27,7 @@ MILISSEGUNDOS_DE_ESPERA_PARA_RECOMECAR = 600  # Pausa no fim de jogo, para quem 
 MARGEM_DO_PAINEL = 32  # Espaço em pixels do monitor entre o jogo, o painel de código e a borda
 LARGURA_MAXIMA_DO_PAINEL = 900  # Em monitores muito largos o painel não passa disso
 COR_EM_VOLTA_DO_JOGO = (16, 18, 28)  # Azul quase preto, no espaço do monitor que sobra em volta do jogo e do painel
+TAMANHO_DA_LETRA_DOS_AVISOS = 7  # Em pixels do jogo (é multiplicado pelo fator de ampliação)
 
 
 # Cria dois objetos Cano (o de cima e o de baixo) com uma abertura sorteada entre eles.
@@ -52,6 +54,8 @@ esquerda_do_jogo = (monitor.get_width() - tamanho_do_jogo_no_monitor[0] - largur
 topo_do_jogo = (monitor.get_height() - tamanho_do_jogo_no_monitor[1]) // 2  # Centralizado na vertical
 area_do_jogo_no_monitor = pygame.Rect((esquerda_do_jogo, topo_do_jogo), tamanho_do_jogo_no_monitor)  # Onde o jogo ampliado aparece
 painel_de_codigo = Painel(pygame.Rect(area_do_jogo_no_monitor.right + MARGEM_DO_PAINEL, topo_do_jogo, largura_do_painel, tamanho_do_jogo_no_monitor[1]))  # Painel do lado direito do jogo
+fonte_dos_avisos = pygame.font.SysFont("consolas", TAMANHO_DA_LETRA_DOS_AVISOS * fator_de_ampliacao, bold=True)  # Letra dos avisos, proporcional ao tamanho do jogo no monitor
+avisos_na_tela = []  # LISTA dos avisos (objetos Aviso) que estão aparecendo agora
 
 imagem_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência, ele cobre tudo)
 relogio = pygame.time.Clock()  # Relógio que controla a velocidade do jogo
@@ -138,8 +142,20 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
     else:  # estado "fim"
         placar_do_jogo.desenhar_fim_de_jogo(tela)  # A tela de fim de jogo por cima da cena congelada
 
+    # MEDIDORES: o painel mostra os atributos que o visitante pode mudar com código, sempre com o valor de agora.
+    painel_de_codigo.mostrar_valor("canos.abertura", TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS, maximo_da_barra=120)
+    painel_de_codigo.mostrar_valor("canos.distancia", DISTANCIA_ENTRE_OS_CANOS, maximo_da_barra=150)
+    painel_de_codigo.mostrar_valor("passaro.forca_da_gravidade", passaro_do_jogador.forca_da_gravidade, maximo_da_barra=1000)
+    painel_de_codigo.mostrar_valor("passaro.forca_do_pulo", passaro_do_jogador.forca_do_pulo, maximo_da_barra=250)
+    painel_de_codigo.atualizar(tempo_do_quadro)  # Anima as barras (no tempo real)
+    for aviso in avisos_na_tela:  # Anima os avisos (no tempo real)
+        aviso.atualizar(tempo_do_quadro)
+    avisos_na_tela = [aviso for aviso in avisos_na_tela if not aviso.acabou()]  # Tira da lista os avisos que já sumiram
+
     monitor.fill(COR_EM_VOLTA_DO_JOGO)  # Pinta o monitor inteiro, apagando o quadro anterior
     pygame.transform.scale(tela, tamanho_do_jogo_no_monitor, monitor.subsurface(area_do_jogo_no_monitor))  # Amplia o jogo pequeno direto no lugar dele no monitor
+    for posicao_na_fila, aviso in enumerate(avisos_na_tela):  # Avisos por cima do jogo, um embaixo do outro
+        aviso.desenhar(monitor, area_do_jogo_no_monitor, fonte_dos_avisos, posicao_na_fila)
     painel_de_codigo.desenhar(monitor)  # O painel é desenhado na resolução do monitor, por isso o texto fica nítido
     pygame.display.flip()  # Mostra na tela tudo que foi desenhado
 
