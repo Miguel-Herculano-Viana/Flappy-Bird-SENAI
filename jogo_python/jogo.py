@@ -10,13 +10,11 @@ from chao import Chao  # Importa a CLASSE Chao do arquivo chao.py
 from passaro import Passaro  # Importa a CLASSE Passaro do arquivo passaro.py
 from placar import Placar  # Importa a CLASSE Placar do arquivo placar.py
 
-LARGURA_DA_TELA = 144  # Largura do jogo em pixels (o pygame amplia para caber no monitor)
-ALTURA_DA_TELA = 256  # Altura do jogo em pixels
+ALTURA_MINIMA_DA_TELA = 256  # O jogo tem pelo menos 256 pixels de altura (a largura e a altura certas dependem do monitor)
 ALTURA_DO_CHAO = 32  # Altura da faixa de chão no pé da tela
-TOPO_DO_CHAO = ALTURA_DA_TELA - ALTURA_DO_CHAO  # Altura da tela onde o chão começa
-CAMINHO_DA_IMAGEM_DO_FUNDO = Path(__file__).parent.parent / "src" / "assets" / "fundo.png"  # Céu com nuvens e cidade (144x224, tudo acima do chão)
+CAMINHO_DA_IMAGEM_DO_FUNDO = Path(__file__).parent.parent / "src" / "assets" / "fundo.png"  # Céu com nuvens e cidade (144x224); é repetido na largura da tela
 QUADROS_POR_SEGUNDO = 60  # Quantas vezes por segundo a tela é redesenhada
-POSICAO_INICIAL_DO_PASSARO = (48, 112)  # Onde o pássaro aparece no começo do jogo
+POSICAO_HORIZONTAL_DO_PASSARO = 48  # Onde o pássaro fica na horizontal (a altura inicial é o meio do céu, calculada depois)
 TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS = 64  # Altura do espaço por onde o pássaro passa
 DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA = 48  # Para a abertura não ficar colada no topo ou no chão
 MILISSEGUNDOS_CANOS = 1500  # Um novo par de canos aparece a cada 1,5 segundo
@@ -33,9 +31,28 @@ def criar_par_de_canos():
 
 
 pygame.init()  # Liga o pygame
-tela = pygame.display.set_mode((LARGURA_DA_TELA, ALTURA_DA_TELA), pygame.SCALED | pygame.FULLSCREEN)  # Tela cheia; SCALED amplia sem borrar a pixel art (sobram faixas pretas dos lados)
+monitor = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)  # Tela cheia, no tamanho real do monitor ("0, 0" = use o tamanho do monitor)
 pygame.display.set_caption("Flappy Bird SENAI")  # Título da janela
-imagem_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência, ele cobre tudo)
+
+# AMPLIAÇÃO POR UM NÚMERO INTEIRO: cada pixel do jogo vira um quadrado de "fator x fator" pixels no monitor.
+# Com um número quebrado (ex.: 4,2) uns pixels ficariam maiores que outros e a pixel art ficaria torta.
+fator_de_ampliacao = max(1, monitor.get_height() // ALTURA_MINIMA_DA_TELA)  # Ex.: 1080 // 256 = 4
+# O TAMANHO DA TELA DO JOGO sai do monitor: o jogo ampliado cobre o monitor inteiro, sem faixas pretas.
+# "-(-a // b)" é a divisão arredondando para CIMA (para não sobrar nenhuma faixinha sem desenho).
+LARGURA_DA_TELA = -(-monitor.get_width() // fator_de_ampliacao)  # Ex.: 1920 / 4 = 480
+ALTURA_DA_TELA = -(-monitor.get_height() // fator_de_ampliacao)  # Ex.: 1080 / 4 = 270
+TOPO_DO_CHAO = ALTURA_DA_TELA - ALTURA_DO_CHAO  # Altura da tela onde o chão começa
+POSICAO_INICIAL_DO_PASSARO = (POSICAO_HORIZONTAL_DO_PASSARO, TOPO_DO_CHAO // 2)  # Onde o pássaro aparece no começo do jogo: no meio do céu
+tela = pygame.Surface((LARGURA_DA_TELA, ALTURA_DA_TELA))  # O jogo é desenhado nesta imagem pequena e depois ampliado para o monitor
+jogo_ampliado = pygame.Surface((LARGURA_DA_TELA * fator_de_ampliacao, ALTURA_DA_TELA * fator_de_ampliacao))  # Onde a imagem ampliada é guardada a cada quadro
+
+# FUNDO: a imagem tem só 144 pixels de largura, então é repetida lado a lado até cobrir a tela,
+# com o pé encostado no chão. O que sobra em cima é pintado com a cor do céu (a cor do topo da imagem).
+pedaco_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência)
+imagem_do_fundo = pygame.Surface((LARGURA_DA_TELA, TOPO_DO_CHAO))
+imagem_do_fundo.fill(pedaco_do_fundo.get_at((0, 0)))  # Cor do céu
+for esquerda_do_pedaco in range(0, LARGURA_DA_TELA, pedaco_do_fundo.get_width()):  # Um pedaço a cada 144 pixels
+    imagem_do_fundo.blit(pedaco_do_fundo, (esquerda_do_pedaco, TOPO_DO_CHAO - pedaco_do_fundo.get_height()))
 relogio = pygame.time.Clock()  # Relógio que controla a velocidade do jogo
 
 EVENTO_DE_CRIAR_CANOS = pygame.event.custom_type()  # Cria um tipo de evento nosso, como se fosse uma "tecla" que o próprio jogo aperta
@@ -112,6 +129,8 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         placar_do_jogo.desenhar(tela)  # Só os pontos no topo, na frente dos canos
     else:  # estado "fim"
         placar_do_jogo.desenhar_fim_de_jogo(tela)  # A tela de fim de jogo por cima da cena congelada
+    pygame.transform.scale(tela, jogo_ampliado.get_size(), jogo_ampliado)  # Amplia o jogo pequeno (cada pixel vira um quadrado)
+    monitor.blit(jogo_ampliado, (0, 0))  # Cobre o monitor inteiro, apagando o quadro anterior
     pygame.display.flip()  # Mostra na tela tudo que foi desenhado
 
 pygame.quit()  # Desliga o pygame
