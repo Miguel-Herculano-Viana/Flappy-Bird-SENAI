@@ -5,7 +5,7 @@ from pathlib import Path  # Ferramenta do Python para montar caminhos de arquivo
 
 import pygame  # Biblioteca de jogos que estamos usando
 
-from cano import Cano  # Importa a CLASSE Cano do arquivo cano.py
+from cano import VELOCIDADE_DO_CENARIO, Cano  # Importa a CLASSE Cano (e a velocidade dos canos) do arquivo cano.py
 from chao import Chao  # Importa a CLASSE Chao do arquivo chao.py
 from painel import Painel  # Importa a CLASSE Painel do arquivo painel.py
 from passaro import Passaro  # Importa a CLASSE Passaro do arquivo passaro.py
@@ -20,7 +20,8 @@ QUADROS_POR_SEGUNDO = 60  # Quantas vezes por segundo a tela é redesenhada
 POSICAO_INICIAL_DO_PASSARO = (48, 112)  # Onde o pássaro aparece no começo do jogo
 TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS = 64  # Altura do espaço por onde o pássaro passa
 DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA = 48  # Para a abertura não ficar colada no topo ou no chão
-MILISSEGUNDOS_CANOS = 1500  # Um novo par de canos aparece a cada 1,5 segundo
+DISTANCIA_ENTRE_OS_CANOS = 90  # Um novo par de canos aparece a cada 90 pixels que o cenário anda
+ESCALA_DO_TEMPO_NORMAL = 1.0  # Velocidade normal do jogo (1.0 = tempo real; 0.5 seria metade da velocidade)
 MILISSEGUNDOS_DE_ESPERA_PARA_RECOMECAR = 600  # Pausa no fim de jogo, para quem está apertando espaço sem parar conseguir ver o resultado
 MARGEM_DO_PAINEL = 32  # Espaço em pixels do monitor entre o jogo, o painel de código e a borda
 LARGURA_MAXIMA_DO_PAINEL = 900  # Em monitores muito largos o painel não passa disso
@@ -28,11 +29,11 @@ COR_EM_VOLTA_DO_JOGO = (16, 18, 28)  # Azul quase preto, no espaço do monitor q
 
 
 # Cria dois objetos Cano (o de cima e o de baixo) com uma abertura sorteada entre eles.
-def criar_par_de_canos():
+def criar_par_de_canos(posicao_horizontal):
     centro_da_abertura = random.randint(DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA, TOPO_DO_CHAO - DISTANCIA_MINIMA_DA_ABERTURA_ATE_A_BORDA)  # Sorteia a altura da abertura (entre o topo e o chão)
     metade_da_abertura = TAMANHO_DA_ABERTURA_ENTRE_OS_CANOS // 2  # Metade para cima do centro, metade para baixo
-    cano_de_cima = Cano(LARGURA_DA_TELA, centro_da_abertura - metade_da_abertura, fica_em_cima=True)  # Nasce logo depois da borda direita da tela
-    cano_de_baixo = Cano(LARGURA_DA_TELA, centro_da_abertura + metade_da_abertura, fica_em_cima=False)  # Mesmo molde, atributos diferentes
+    cano_de_cima = Cano(posicao_horizontal, centro_da_abertura - metade_da_abertura, fica_em_cima=True)  # Nasce na posição pedida (perto da borda direita da tela)
+    cano_de_baixo = Cano(posicao_horizontal, centro_da_abertura + metade_da_abertura, fica_em_cima=False)  # Mesmo molde, atributos diferentes
     return cano_de_cima, cano_de_baixo  # Devolve os dois objetos criados
 
 
@@ -55,8 +56,6 @@ painel_de_codigo = Painel(pygame.Rect(area_do_jogo_no_monitor.right + MARGEM_DO_
 imagem_do_fundo = pygame.image.load(CAMINHO_DA_IMAGEM_DO_FUNDO).convert()  # Carrega o fundo (sem transparência, ele cobre tudo)
 relogio = pygame.time.Clock()  # Relógio que controla a velocidade do jogo
 
-EVENTO_DE_CRIAR_CANOS = pygame.event.custom_type()  # Cria um tipo de evento nosso, como se fosse uma "tecla" que o próprio jogo aperta
-
 passaro_do_jogador = Passaro(POSICAO_INICIAL_DO_PASSARO)  # Cria um OBJETO a partir da classe Passaro
 placar_do_jogo = Placar()  # Cria um OBJETO a partir da classe Placar
 chao_do_jogo = Chao(LARGURA_DA_TELA, ALTURA_DO_CHAO, TOPO_DO_CHAO)  # Cria um OBJETO a partir da classe Chao
@@ -70,23 +69,22 @@ todos_os_objetos_do_jogo = pygame.sprite.Group(passaro_do_jogador)  # Grupo que 
 estado_do_jogo = "inicio"  # Todo jogo começa na tela de início
 jogo_esta_rodando = True  # Enquanto for True, a janela continua aberta
 momento_em_que_o_jogo_acabou = 0  # Em que milissegundo o jogador perdeu (para contar a pausa antes de recomeçar)
+distancia_desde_o_ultimo_cano = 0.0  # Quantos pixels o cenário andou desde o último par de canos
+escala_do_tempo = ESCALA_DO_TEMPO_NORMAL  # Multiplica o tempo do jogo: abaixo de 1 é câmera lenta, 0 é pausa
 while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
-    tempo_do_quadro = relogio.tick(QUADROS_POR_SEGUNDO) / 1000  # Segundos que passaram desde o último quadro
+    tempo_do_quadro = relogio.tick(QUADROS_POR_SEGUNDO) / 1000  # Segundos REAIS que passaram desde o último quadro
+    tempo_do_jogo = tempo_do_quadro * escala_do_tempo  # Segundos que passaram DENTRO do jogo (em câmera lenta, passa menos tempo)
 
     for evento in pygame.event.get():  # Verifica tudo que aconteceu (teclas, cliques, fechar a janela, nosso evento)
         apertou_esc = evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE  # Em tela cheia não tem o X da janela, então o ESC fecha o jogo
         if evento.type == pygame.QUIT or apertou_esc:  # Fechou a janela ou apertou ESC?
             jogo_esta_rodando = False  # Então sai do laço e o jogo termina
-        if evento.type == EVENTO_DE_CRIAR_CANOS and estado_do_jogo == "jogando":  # Chegou a hora de um novo par de canos (e estamos jogando)?
-            novos_canos = criar_par_de_canos()  # Cria os dois objetos Cano
-            todos_os_canos.add(novos_canos)  # Coloca no grupo dos canos (para a batida)
-            todos_os_objetos_do_jogo.add(novos_canos)  # E no grupo geral (para mover e desenhar)
         apertou_espaco = evento.type == pygame.KEYDOWN and evento.key == pygame.K_SPACE  # Apertou a barra de espaço?
         clicou_com_botao_esquerdo = evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1  # Clicou com o botão esquerdo?
         if apertou_espaco or clicou_com_botao_esquerdo:  # O que espaço ou clique fazem depende do estado do jogo
             if estado_do_jogo == "inicio":  # Na tela de início: começa a partida
                 estado_do_jogo = "jogando"  # Muda o estado
-                pygame.time.set_timer(EVENTO_DE_CRIAR_CANOS, MILISSEGUNDOS_CANOS)  # Liga a criação de canos, contando a partir de agora
+                distancia_desde_o_ultimo_cano = 0.0  # Começa a contar a distância para o primeiro par de canos
                 passaro_do_jogador.pular()  # A primeira apertada já é um pulo
             elif estado_do_jogo == "jogando":  # Durante a partida: pula
                 passaro_do_jogador.pular()  # Chama o MÉTODO pular do objeto
@@ -100,11 +98,20 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
 
     if estado_do_jogo == "inicio":  # Na tela de início, o pássaro só bate as asas, sem cair
         passaro_do_jogador.animar()  # Podemos chamar um método do objeto sozinho, sem o "update" inteiro
-        chao_do_jogo.update(tempo_do_quadro)  # O chão já vai andando, como se o pássaro estivesse voando no lugar
+        chao_do_jogo.update(tempo_do_jogo)  # O chão já vai andando, como se o pássaro estivesse voando no lugar
 
     if estado_do_jogo == "jogando":  # Tudo isto só acontece durante a partida; no fim de jogo, a cena fica congelada
-        todos_os_objetos_do_jogo.update(tempo_do_quadro)  # POLIMORFISMO: chama o "update" de cada objeto, e cada um faz o seu
-        chao_do_jogo.update(tempo_do_quadro)  # O chão fica fora do grupo (ele é desenhado por cima dos canos), então atualizamos ele aqui
+        todos_os_objetos_do_jogo.update(tempo_do_jogo)  # POLIMORFISMO: chama o "update" de cada objeto, e cada um faz o seu
+        chao_do_jogo.update(tempo_do_jogo)  # O chão fica fora do grupo (ele é desenhado por cima dos canos), então atualizamos ele aqui
+
+        # CANOS POR DISTÂNCIA (e não por relógio): em câmera lenta o cenário anda menos, então os canos também demoram mais para aparecer.
+        # Com um relógio de verdade, eles continuariam nascendo no mesmo ritmo e ficariam amontoados.
+        distancia_desde_o_ultimo_cano += VELOCIDADE_DO_CENARIO * tempo_do_jogo  # Soma o quanto o cenário andou neste quadro
+        if distancia_desde_o_ultimo_cano >= DISTANCIA_ENTRE_OS_CANOS:  # Já andou o suficiente para um novo par?
+            distancia_desde_o_ultimo_cano -= DISTANCIA_ENTRE_OS_CANOS  # Guarda só o que passou da conta
+            novos_canos = criar_par_de_canos(LARGURA_DA_TELA - distancia_desde_o_ultimo_cano)  # Desconta o que passou, para o espaço entre os pares ficar sempre igual
+            todos_os_canos.add(novos_canos)  # Coloca no grupo dos canos (para a batida)
+            todos_os_objetos_do_jogo.add(novos_canos)  # E no grupo geral (para mover e desenhar)
 
         for cano in todos_os_canos:  # Olha cada cano que está na tela
             if cano.vale_ponto and cano.rect.right < passaro_do_jogador.rect.centerx:  # O cano já ficou para trás do pássaro?
