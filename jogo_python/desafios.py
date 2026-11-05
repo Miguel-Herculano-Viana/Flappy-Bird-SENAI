@@ -9,13 +9,16 @@
 # a câmera lenta e o tutorial, e avisa o visitante de tudo que mudou.
 
 import math  # Ferramenta do Python com contas (usada para fazer o destaque pulsar)
+import textwrap  # Quebra as explicações do tutorial em linhas curtas
 import random  # Ferramenta do Python para sortear números
 
 import pygame  # Biblioteca de jogos que estamos usando
 
 from avisos import Aviso, criar_caixa  # Pop-ups e caixas de texto
 from cano import VELOCIDADE_DO_CENARIO  # Para a prévia do pulo andar junto com o cenário
-from editor import EditorDeCodigo  # O editor onde o visitante digita o código
+from editor import EditorDeCodigo, conferir_linha  # O editor rápido e a validação segura de uma linha
+from editor_de_script import EditorDeScript  # O editor de várias linhas (usado no tutorial digitado)
+from tutorial import TutorialDigitado  # O "professor" que digita as explicações ao vivo
 
 # BALANCEAMENTO: mude estes números para deixar o jogo mais fácil ou mais difícil
 PRIMEIRO_DESAFIO_NO_PAR = 2  # O primeiro desafio aparece no 2º par de canos
@@ -308,6 +311,7 @@ class GerenciadorDeDesafios:
         self.pares_ate_o_proximo_desafio = PRIMEIRO_DESAFIO_NO_PAR
         self.desafio_ativo = None  # O desafio que está acontecendo agora (ou None)
         self.editor = None  # O editor do desafio ativo (continua o mesmo se o visitante fechar e abrir de novo)
+        self.tutorial = None
         self.editor_aberto = False
         self.ja_alertou = False  # O alerta do desafio ativo já apareceu?
         self.resolvido = False  # O visitante já acertou o código do desafio ativo?
@@ -346,6 +350,7 @@ class GerenciadorDeDesafios:
         desafio.comecar(passaro, par_de_canos)  # POLIMORFISMO: cada desafio cria o seu problema
         self.desafio_ativo = desafio
         self.editor = None
+        self.tutorial = None  # O tutorial digitado (só na primeira vez de cada desafio)
         self.editor_aberto = False
         self.ja_alertou = False
         self.resolvido = False
@@ -368,6 +373,15 @@ class GerenciadorDeDesafios:
             if self.etapa_do_tutorial == "esperando":
                 self.etapa_do_tutorial = "mostrando"  # Para o jogo e explica
 
+        if self.tutorial:  # Tutorial digitado: o professor escreve; quando o visitante acerta, o valor da linha é aceito
+            self.tutorial.atualizar(tempo_real)
+            linha = self.editor.linhas[self.editor.linha_do_cursor].strip()
+            valor, _ = conferir_linha(linha, *self.limites_do_tutorial) if linha else (None, None)
+            if self.tutorial.estado == "esperando":
+                self.editor.valor_da_previa = valor  # Prévia ao vivo enquanto digita
+            if self.tutorial.terminou() and self.editor.valor_aceito is None:
+                linha_certa = next(linha for linha in reversed(self.editor.linhas) if linha.strip() and not linha.startswith("#"))
+                self.editor.valor_aceito = conferir_linha(linha_certa.strip(), *self.limites_do_tutorial)[0]
         if self.editor:
             self.editor.atualizar(tempo_real)
             if self.editor.valor_aceito is not None and not self.resolvido:  # Acabou de acertar!
@@ -414,6 +428,7 @@ class GerenciadorDeDesafios:
             self.desafios_com_tutorial_visto.append(desafio)
         self.desafio_ativo = None
         self.editor = None
+        self.tutorial = None  # O tutorial digitado (só na primeira vez de cada desafio)
         self.editor_aberto = False
         self.etapa_do_tutorial = None
         self.pares_ate_o_proximo_desafio = random.randint(MENOR_INTERVALO_ENTRE_DESAFIOS, MAIOR_INTERVALO_ENTRE_DESAFIOS)
@@ -426,8 +441,10 @@ class GerenciadorDeDesafios:
         if self.editor and self.editor.acabou_o_tempo():  # Já gastou o tempo deste desafio
             self.avisos.append(Aviso("SEM TEMPO! DESVIE COMO PUDER", COR_DO_ALERTA))
             return
-        if self.editor is None:  # Primeira vez neste desafio: cria o editor
-            no_tutorial = self.etapa_do_tutorial == "mostrando"
+        if self.editor is None and self.etapa_do_tutorial == "mostrando":  # Primeira vez deste desafio: TUTORIAL DIGITADO
+            self.comecar_tutorial_digitado(desafio)
+        elif self.editor is None:  # Das outras vezes: o editor rápido (com câmera lenta e tempo correndo)
+            no_tutorial = False
             self.editor = EditorDeCodigo(
                 desafio.objeto, desafio.atributo,
                 self.misturar(desafio.minimo, desafio.minimo_no_dificil), self.misturar(desafio.maximo, desafio.maximo_no_dificil),  # A faixa aperta com o nível
@@ -439,6 +456,21 @@ class GerenciadorDeDesafios:
         if self.etapa_do_tutorial == "mostrando":
             self.etapa_do_tutorial = "editando"
         pygame.key.start_text_input()  # Garante que o pygame vai mandar as letras digitadas (evento TEXTINPUT)
+
+    # TUTORIAL DIGITADO: o painel começa vazio, o professor escreve a explicação ao vivo e o visitante digita a linha inteira.
+    def comecar_tutorial_digitado(self, desafio):
+        minimo = self.misturar(desafio.minimo, desafio.minimo_no_dificil)
+        maximo = self.misturar(desafio.maximo, desafio.maximo_no_dificil)
+        exemplo = f"{desafio.objeto}.{desafio.atributo} = {(minimo + maximo) // 2}"
+        explicacao = [parte for frase in desafio.explicacao[:-1] for parte in textwrap.wrap(frase, 46)]  # Sem a última frase ("Digite um número...")
+        self.editor = EditorDeScript("", rodape=lambda: [(f"# Valores permitidos: de {minimo} a {maximo}", (140, 200, 130))])
+        self.tutorial = TutorialDigitado(self.editor, [
+            {"falar": [f"#> {linha}" for linha in explicacao]},
+            {"falar": [f"#> Escreva a linha inteira, com um número", f"#> de {minimo} a {maximo}. Por exemplo:", f"#> Digite:   {exemplo}"],
+             "conferir": lambda linha: conferir_linha(linha.strip(), desafio.objeto, desafio.atributo, minimo, maximo)[0] is not None,
+             "exemplo": exemplo},
+        ])
+        self.limites_do_tutorial = (desafio.objeto, desafio.atributo, minimo, maximo)
 
     # ESC com o editor aberto: fecha sem perder o que foi digitado (o tempo restante continua o mesmo).
     def fechar_editor(self):
@@ -465,7 +497,9 @@ class GerenciadorDeDesafios:
         return [f"{desafio.alerta.capitalize()}", "Aperte ENTER para abrir o editor e programar.", "(ESC fecha o editor)"]
 
     def tratar_evento(self, evento):
-        if self.editor and not self.resolvido:
+        if self.tutorial and not self.tutorial.terminou() and not self.resolvido:
+            self.tutorial.tratar_evento(evento)  # O tutorial confere a linha antes
+        elif self.editor and not self.resolvido:
             self.editor.tratar_evento(evento)
 
     # A câmera lenta (e a pausa) dependem do que está acontecendo.

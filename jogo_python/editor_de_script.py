@@ -40,9 +40,14 @@ class EditorDeScript:
         self.resultado = None  # O que a função "conferir" devolveu quando deu certo
         self.tempo_do_cursor = 0.0
         self.bloqueado = False  # True = o teclado não escreve (o tutorial está digitando)
+        self.valor_aceito = None  # Usado nos desafios do Flappy: o número que o visitante acertou
+        self.valor_da_previa = None  # Usado nos desafios do Flappy: o número da linha que está sendo digitada
         self.dica = "# ENTER = rodar   Shift+ENTER = nova linha   ESC = fechar"  # Linha de ajuda embaixo do código (o tutorial troca)
 
     # MÉTODOS
+
+    def acabou_o_tempo(self):  # O editor do tutorial não tem limite de tempo
+        return False
 
     def texto(self):
         return "\n".join(self.linhas)  # Junta as linhas de volta num texto só
