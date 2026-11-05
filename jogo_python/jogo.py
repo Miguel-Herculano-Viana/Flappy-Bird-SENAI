@@ -251,6 +251,8 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
     else:
         editor_visivel = gerenciador_de_desafios.editor_para_mostrar() if estado_do_jogo == "jogando" else None  # O editor só aparece durante a partida
         mensagem_do_painel = gerenciador_de_desafios.mensagem_do_painel() if estado_do_jogo == "jogando" else None  # Ex.: "Aperte ENTER para programar"
+    painel_de_codigo.aberto = editor_visivel is not None or mensagem_do_painel is not None  # O painel só aparece quando tem algo para mostrar
+    painel_de_codigo.texto_da_aba = "ENTER: código" if modo_nave and modo_nave.etapa == "jogando" else None
     painel_de_codigo.desenhar(monitor, editor_visivel, mensagem_do_painel)  # O painel é desenhado na resolução do monitor, por isso o texto fica nítido
     pygame.display.flip()  # Mostra na tela tudo que foi desenhado
 

@@ -52,7 +52,17 @@ escrevendo uma linha de Python no painel ao lado do jogo. Com o editor aberto, o
 
 Depois de 3 canos, uma nave aparece, explode os canos e foge para o fundo do céu. O pássaro ganha uma arma
 e o jogo vira um **shooter horizontal**: setas ou WASD movem o pássaro em qualquer direção e as armas atiram sozinhas.
-Derrotar inimigos dá XP; ao subir de nível o jogo pausa e o **script das armas** abre no painel:
+Derrotar inimigos dá XP; ao subir de nível o jogo pausa e o **script das armas** abre no painel.
+
+- **O script começa vazio.** Um tutorial "digita" as explicações ao vivo, letra por letra, e pede para o visitante
+  escrever cada linha (`passaro.armas = [blaster]`, `blaster.cadencia = 4`...). ENTER confere a linha: se estiver
+  errada, ela fica vermelha e aparece a dica. No fim, ENTER numa linha vazia roda o script.
+- **Arma nova:** o tutorial pede para digitar a linha que equipa a arma e depois os dois parâmetros dela.
+- **O painel fica escondido** durante o jogo (aparece só a aba "ENTER: código"). **ENTER a qualquer momento**
+  pausa o jogo e abre o painel para mudar o script; ESC volta sem mudar.
+- No Modo 1, o painel também fica escondido e só aparece quando surge um desafio.
+
+Exemplo de script depois de alguns níveis:
 
 ```python
 # SCRIPT das armas: mude os números e aperte ENTER.

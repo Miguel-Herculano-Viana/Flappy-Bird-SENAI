@@ -13,6 +13,7 @@
 #   "jogando"  -> o shooter em si
 #   "derrota" / "vitoria" -> o fim (depois de alguns segundos, "acabou" vira True)
 
+import ast  # Lê uma linha de código sem executar (para o tutorial conferir o que o visitante digitou)
 import math  # Ferramenta do Python com contas (seno)
 import random  # Ferramenta do Python para sortear números
 import re  # Ferramenta do Python para achar padrões em textos (usada para atualizar os limites no script)
@@ -26,6 +27,7 @@ from editor_de_script import EditorDeScript  # O editor de várias linhas
 from imagens import carregar_quadros  # Sprites do Modo Nave
 from inimigos import Atirador, Batedor, ChefeAmarelo, ChefeVerde, ChefeVermelho, Coracao, Explosao, Tanque  # Os inimigos
 from script_das_armas import conferir_script, resumo_do_orcamento  # Validação segura do script
+from tutorial import TutorialDigitado  # O "professor" que digita as explicações ao vivo
 
 # BALANCEAMENTO: mude estes números para deixar o modo mais fácil ou mais difícil
 VELOCIDADE_DO_PASSARO = 130  # Pixels por segundo
@@ -56,7 +58,7 @@ COR_DA_BARRA_DE_VIDA = (230, 70, 70)
 COR_DA_BARRA_DE_XP = (120, 190, 255)
 COR_DO_FUNDO_DA_BARRA = (39, 45, 70)
 
-CABECALHO_DO_TUTORIAL = "# SCRIPT das armas: mude os números e aperte ENTER."  # Comentários curtos: o editor não quebra linhas de código
+PREFIXO_DO_PROFESSOR = "#> "  # Comentários escritos pelo tutorial: somem do script quando ele roda (o script guarda só o código do visitante)
 
 
 class ModoNave:
@@ -84,10 +86,10 @@ class ModoNave:
         self.armas = criar_todas_as_armas()  # Dicionário: nome -> Arma
         self.desbloqueadas = ["blaster"]  # LISTA das armas que o visitante já ganhou
         self.equipadas = ["blaster"]  # LISTA das armas que estão atirando (no máximo 2)
-        self.script = "\n".join([CABECALHO_DO_TUTORIAL, "# passaro.armas: LISTA das armas equipadas (máx. 2)", "passaro.armas = [blaster]"]
-                                + self.armas["blaster"].linhas_do_script())
+        self.script = ""  # O script começa VAZIO: quem escreve é o visitante, com a ajuda do tutorial
+        self.tutorial = None  # O tutorial digitado que está acontecendo (ou None)
+        self.tutorial_obrigatorio = False  # True = o ESC não fecha (o visitante precisa terminar)
         self.editor = None  # O editor aberto (ou None)
-        self.visualizacao = None  # O mesmo script, só para leitura, mostrado durante a partida
         self.cartas = []  # Nomes das armas oferecidas ao subir de nível
         self.carta_escolhida = 0
 
@@ -138,6 +140,8 @@ class ModoNave:
         self.tempo_na_etapa += tempo
         if self.editor:
             self.editor.atualizar(tempo)  # Cursor piscando
+        if self.tutorial:
+            self.tutorial.atualizar(tempo)  # O professor digitando
         if self.etapa in ("chegada", "ataque", "fuga"):
             self.atualizar_cena(tempo)
         elif self.etapa == "jogando":
@@ -184,7 +188,7 @@ class ModoNave:
             if progresso >= 1:
                 self.nave_mae_no_fundo = True
                 self.avisos.append(Aviso("VOCÊ GANHOU UM BLASTER!", COR_DO_ACERTO, segundos=3.5))
-                self.abrir_editor(CABECALHO_DO_TUTORIAL)
+                self.abrir_editor(self.passos_do_primeiro_tutorial(), obrigatorio=True)
         if self.raio_da_cena:
             ponto, segundos = self.raio_da_cena
             self.raio_da_cena = (ponto, segundos - tempo) if segundos > tempo else None
@@ -202,7 +206,7 @@ class ModoNave:
         if direcao.length() > 0:
             direcao = direcao.normalize()
         self.posicao_do_passaro += direcao * VELOCIDADE_DO_PASSARO * tempo
-        self.posicao_do_passaro.x = max(10, min(self.posicao_do_passaro.x, self.area_livre.right - 24))  # Não entra embaixo do painel
+        self.posicao_do_passaro.x = max(10, min(self.posicao_do_passaro.x, self.area_do_ceu.right - 24))  # O painel fica escondido durante o jogo: dá para usar a tela toda
         self.posicao_do_passaro.y = max(10, min(self.posicao_do_passaro.y, self.area_do_ceu.bottom - 10))
         self.passaro.velocidade_vertical = direcao.y * VELOCIDADE_DO_PASSARO  # Para o pássaro inclinar quando sobe ou desce
         self.passaro.rect.center = (round(self.posicao_do_passaro.x), round(self.posicao_do_passaro.y))
@@ -354,28 +358,78 @@ class ModoNave:
             mudancas.append(f"{nome} {antes}->{arma.limite}")
             self.script = re.sub(rf"^# Limite do {nome}: .*$", f"# Limite do {nome}: {arma.texto_do_limite()}", self.script, flags=re.MULTILINE)  # Atualiza o comentário no script
         self.avisos.append(Aviso("LIMITES: " + ", ".join(mudancas), COR_DE_INFORMACAO, segundos=4.0))
-        self.abrir_editor(f"# NÍVEL {self.nivel}! Limites maiores. Ajuste e dê ENTER.")
+        self.abrir_editor([{"falar": [f"{PREFIXO_DO_PROFESSOR}NÍVEL {self.nivel}! Os limites aumentaram:"]
+                                     + [f"{PREFIXO_DO_PROFESSOR}  {nome}: {self.armas[nome].texto_do_limite()}" for nome in self.desbloqueadas]
+                                     + [f"{PREFIXO_DO_PROFESSOR}Aumente os números e aperte ENTER para rodar."]}])
 
     def escolher_carta(self):
         nome = self.cartas[self.carta_escolhida]
         arma = self.armas[nome]
         self.desbloqueadas.append(nome)
         self.cartas = []
-        self.script += "\n" + "\n".join([f"# NOVA ARMA: coloque {nome} em passaro.armas"] + arma.linhas_do_script())
         self.avisos.append(Aviso(f"NOVA ARMA: {arma.titulo}!", COR_DO_ACERTO, segundos=3.0))
-        self.abrir_editor(f"# NÍVEL {self.nivel}! Nova arma: {nome}. Equipe e dê ENTER.")
+        self.abrir_editor(self.passos_da_arma_nova(nome), obrigatorio=True)
 
-    def abrir_editor(self, cabecalho):
-        linhas = self.script.split("\n")
-        if linhas and linhas[0].startswith("#"):  # A primeira linha é sempre o cabeçalho, que muda a cada vez
-            linhas[0] = cabecalho
-        else:
-            linhas.insert(0, cabecalho)
-        self.script = "\n".join(linhas)
+    # Abre o editor com o script atual. "passos" é o tutorial digitado (None = editor livre).
+    def abrir_editor(self, passos=None, obrigatorio=False):
         self.editor = EditorDeScript(self.script, self.conferir, self.rodape_do_editor)
-        self.editor.linha_do_cursor = next((indice for indice, linha in enumerate(linhas) if not linha.startswith("#")), 0)  # Cursor na primeira linha de código
+        self.editor.linha_do_cursor = len(self.editor.linhas) - 1
+        self.tutorial = TutorialDigitado(self.editor, passos) if passos else None
+        self.tutorial_obrigatorio = obrigatorio
         self.mudar_de_etapa("editando")
         pygame.key.start_text_input()  # Garante que o pygame manda as letras digitadas (evento TEXTINPUT)
+
+    # ------------------------------------------------------------------ TUTORIAIS DIGITADOS
+
+    # O primeiro tutorial: o visitante escreve o script do blaster do zero, linha por linha.
+    def passos_do_primeiro_tutorial(self):
+        p = PREFIXO_DO_PROFESSOR
+        return [
+            {"falar": [f"{p}Olá! Este é o painel de CÓDIGO.", f"{p}Aqui você programa as armas do pássaro.", f"{p}O jogo fica PAUSADO enquanto você programa."]},
+            {"falar": [f"{p}PASSO 1: equipar uma arma.", f"{p}'passaro' é um OBJETO e 'armas' é um ATRIBUTO.", f"{p}Os colchetes [ ] formam uma LISTA.",
+                       f"{p}Digite:   passaro.armas = [blaster]"],
+             "conferir": self.conferir_lista("blaster"), "exemplo": "passaro.armas = [blaster]"},
+            {"falar": [f"{p}PASSO 2: a CADÊNCIA é quantos tiros por segundo.", f"{p}Pode ser de 1 a 10.", f"{p}Digite:   blaster.cadencia = 4"],
+             "conferir": self.conferir_parametro("blaster", "cadencia"), "exemplo": "blaster.cadencia = 4"},
+            {"falar": [f"{p}PASSO 3: o DANO é a força de cada tiro (1 a 10).", f"{p}Digite:   blaster.dano = 3"],
+             "conferir": self.conferir_parametro("blaster", "dano"), "exemplo": "blaster.dano = 3"},
+            {"falar": [f"{p}REGRA: cadencia x dano pode dar no MÁXIMO 12.", f"{p}4 x 3 = 12 pode. 5 x 3 = 15 não pode!",
+                       f"{p}Confira a conta lá embaixo e aperte ENTER", f"{p}na linha vazia para RODAR o seu script."], "rodar": True},
+        ]
+
+    # Arma nova: o visitante equipa (coloca na lista) e escreve os dois parâmetros dela.
+    def passos_da_arma_nova(self, nome):
+        p = PREFIXO_DO_PROFESSOR
+        arma = self.armas[nome]
+        primeiro, segundo = arma.nomes_dos_parametros()
+        outra = next((equipada for equipada in self.equipadas if equipada != nome), "blaster")
+        lista = f"passaro.armas = [{outra}, {nome}]"
+        passos = [{"falar": [f"{p}Você ganhou uma arma nova: {nome}!", f"{p}Para equipar, ela tem que estar na LISTA", f"{p}passaro.armas (no máximo 2 armas).", f"{p}Digite:   {lista}"],
+                   "conferir": self.conferir_lista(nome), "exemplo": lista}]
+        for numero, parametro in enumerate((primeiro, segundo)):
+            minimo, maximo = arma.parametros[parametro]
+            exemplo = f"{nome}.{parametro} = {arma.valores[parametro]}"
+            passos.append({"falar": [f"{p}{arma.descricao[numero + 1]} ({minimo} a {maximo})", f"{p}Digite:   {exemplo}"],
+                           "conferir": self.conferir_parametro(nome, parametro), "exemplo": exemplo})
+        passos.append({"falar": [f"{p}REGRA do {nome}: {arma.texto_do_limite()}", f"{p}Aperte ENTER na linha vazia para RODAR."], "rodar": True})
+        return passos
+
+    # FUNÇÕES QUE DEVOLVEM FUNÇÕES: cada uma cria um "conferidor" para um passo do tutorial.
+    def conferir_lista(self, nome_que_precisa_ter):
+        def conferir(linha):
+            comando = ler_atribuicao(linha)
+            return (comando is not None and comando[0] == "passaro" and comando[1] == "armas" and isinstance(comando[2], ast.List)
+                    and nome_que_precisa_ter in [item.id for item in comando[2].elts if isinstance(item, ast.Name)])
+        return conferir
+
+    def conferir_parametro(self, nome_da_arma, parametro):
+        minimo, maximo = self.armas[nome_da_arma].parametros[parametro]
+        def conferir(linha):
+            comando = ler_atribuicao(linha)
+            if comando is None or comando[:2] != (nome_da_arma, parametro) or not isinstance(comando[2], ast.Constant):
+                return False
+            return type(comando[2].value) is int and minimo <= comando[2].value <= maximo
+        return conferir
 
     def armas_desbloqueadas(self):
         return {nome: self.armas[nome] for nome in self.desbloqueadas}
@@ -395,19 +449,25 @@ class ModoNave:
         for nome, valores in configuracao["valores"].items():
             self.armas[nome].valores = dict(valores)
         self.equipadas = configuracao["armas"]
-        self.script = texto
+        self.script = "\n".join(linha for linha in texto.split("\n") if not linha.startswith(PREFIXO_DO_PROFESSOR) and linha.strip())  # Guarda só o código do visitante
+        self.tutorial = None
         for nome in self.equipadas:
             arma = self.armas[nome]
             self.avisos.append(Aviso(f"{nome}: " + ", ".join(f"{parametro} {valor}" for parametro, valor in arma.valores.items()), COR_DO_ACERTO, segundos=3.0))
         self.editor = None
-        self.visualizacao = None
         self.mudar_de_etapa("jogando")
 
     def tratar_evento(self, evento):
         if self.etapa == "editando" and self.editor:
-            self.editor.tratar_evento(evento)
+            if self.tutorial and not self.tutorial.terminou():
+                self.tutorial.tratar_evento(evento)  # O tutorial confere cada linha antes
+            else:
+                self.editor.tratar_evento(evento)
             if self.editor.resultado:  # O ENTER rodou o script e deu certo
                 self.aplicar(self.editor.resultado, self.editor.texto())
+        elif self.etapa == "jogando" and evento.type == pygame.KEYDOWN and evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            # ENTER a qualquer momento: pausa e abre o painel para mudar o script
+            self.abrir_editor([{"falar": [f"{PREFIXO_DO_PROFESSOR}PAUSADO. Mude o script como quiser,", f"{PREFIXO_DO_PROFESSOR}aperte ENTER para rodar ou ESC para voltar."]}])
         elif self.etapa == "cartas" and evento.type == pygame.KEYDOWN:
             if evento.key in (pygame.K_LEFT, pygame.K_a):
                 self.carta_escolhida = (self.carta_escolhida - 1) % len(self.cartas)  # "%": dá a volta (da primeira vai para a última)
@@ -423,23 +483,15 @@ class ModoNave:
         return self.etapa in ("editando", "cartas")
 
     def fechar_editor(self):  # ESC no editor: fecha sem mudar nada (as armas continuam como estavam)
-        if self.etapa == "editando":
+        if self.etapa == "editando" and not self.tutorial_obrigatorio:
             self.editor = None
+            self.tutorial = None
             self.mudar_de_etapa("jogando")
 
     # ------------------------------------------------------------------ PAINEL
 
     def editor_para_mostrar(self):
-        if self.editor:
-            return self.editor
-        if not self.nave_mae_no_fundo and self.etapa in ("chegada", "ataque", "fuga"):
-            return None
-        if self.visualizacao is None:  # Durante a partida: o script só para leitura
-            self.visualizacao = EditorDeScript(self.script, somente_leitura=True, rodape=lambda: [
-                ("# Este script está controlando suas armas agora.", COR_DO_COMENTARIO),
-                ("# Ele abre de novo quando você subir de nível.", COR_DO_COMENTARIO),
-                ("# Setas ou WASD: voar. As armas atiram sozinhas.", COR_DO_COMENTARIO)])
-        return self.visualizacao
+        return self.editor  # Só aparece quando está aberto (o painel fica escondido durante o jogo)
 
     def mensagem_do_painel(self):
         if self.etapa in ("chegada", "ataque", "fuga"):
@@ -545,3 +597,13 @@ class ModoNave:
                 y += self.fontes[5].get_height() + fator
         dica = self.fontes[6].render("<- -> escolhe    ENTER confirma (ou aperte 1, 2, 3)", True, (255, 255, 255))
         monitor.blit(dica, dica.get_rect(midtop=(livre.centerx, livre.height * 0.34 + altura + 6 * fator)))
+
+
+# Lê UMA linha do tipo "objeto.atributo = valor" sem executar. Devolve (objeto, atributo, nó do valor) ou None.
+def ler_atribuicao(linha):
+    try:
+        comando = ast.parse(linha.strip()).body[0]
+        alvo = comando.targets[0]
+        return alvo.value.id, alvo.attr, comando.value
+    except Exception:  # Qualquer coisa fora desse formato
+        return None

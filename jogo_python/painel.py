@@ -66,6 +66,9 @@ class Painel:
         self.margem = self.altura_da_linha  # Espaço entre a borda do painel e o texto
         self.altura_da_barra_de_titulo = self.altura_da_linha * 3 // 2 // self.pixel * self.pixel  # Arredondada para um número inteiro de "pixels do jogo"
         self.medidores = {}  # Dicionário: nome do atributo -> Medidor
+        self.aberto = False  # O jogo diz se o painel deve aparecer
+        self.abertura = 0.0  # 0 = escondido fora da tela, 1 = todo aberto (anima entre os dois)
+        self.texto_da_aba = None  # Texto da "aba" que aparece na borda quando o painel está escondido
         self.fundo = self.montar_fundo()  # O fundo nunca muda, então é desenhado uma vez só e guardado
 
     # Monta a imagem do fundo do painel (vidro + moldura + barra de título), com transparência.
@@ -112,12 +115,35 @@ class Painel:
         return self.retangulo.bottom - self.margem - len(self.medidores) * self.altura_da_linha * 2 - self.altura_da_linha * 2
 
     def atualizar(self, tempo_real):
+        alvo = 1.0 if self.aberto else 0.0
+        self.abertura += (alvo - self.abertura) * min(1.0, 9 * tempo_real)  # Desliza para dentro ou para fora
         for medidor in self.medidores.values():
             medidor.atualizar(tempo_real)
 
     # Desenha o painel no monitor. Se tiver um "editor" aberto, ele aparece em cima.
     # "mensagem" (uma lista de linhas) troca a explicação normal quando o editor está fechado.
     def desenhar(self, monitor, editor=None, mensagem=None):
+        if self.abertura < 0.01:  # Escondido: só a aba na borda
+            self.desenhar_aba(monitor)
+            return
+        # O painel desliza: desenhamos tudo com o retângulo empurrado para a direita (para fora da tela)
+        retangulo_de_verdade = self.retangulo
+        distancia_ate_sumir = monitor.get_width() - self.retangulo.x
+        self.retangulo = self.retangulo.move(round((1 - self.abertura) * distancia_ate_sumir), 0)
+        self.desenhar_aberto(monitor, editor, mensagem)
+        self.retangulo = retangulo_de_verdade
+
+    def desenhar_aba(self, monitor):
+        if not self.texto_da_aba:
+            return
+        texto = self.fonte_do_titulo.render(self.texto_da_aba, True, COR_DO_TITULO)
+        aba = texto.get_rect().inflate(self.margem, self.margem // 2)
+        aba.topright = (monitor.get_width(), self.retangulo.y)
+        pygame.draw.rect(monitor, COR_DA_MOLDURA, aba)
+        pygame.draw.rect(monitor, COR_DO_CONTORNO, aba, width=self.pixel)
+        monitor.blit(texto, texto.get_rect(center=aba.center))
+
+    def desenhar_aberto(self, monitor, editor, mensagem):
         monitor.blit(self.fundo, self.retangulo)  # Vidro, moldura e barra de título
         barra_de_titulo = pygame.Rect(self.retangulo.x, self.retangulo.y, self.retangulo.width, self.altura_da_barra_de_titulo)
         titulo = self.fonte_do_titulo.render("codigo.py", True, COR_DO_TITULO)  # Nome do "arquivo", como numa aba de editor

@@ -17,6 +17,7 @@ COR_DO_CURSOR = (255, 255, 255)
 COR_DO_ERRO = (255, 110, 110)
 COR_DA_DICA = (140, 200, 130)
 COR_DO_ACERTO = (120, 230, 120)
+COR_DO_DESTAQUE = (255, 210, 60)  # Amarelo: o que o visitante deve digitar e as dicas de erro
 
 
 class EditorDeScript:
@@ -38,6 +39,8 @@ class EditorDeScript:
         self.erro = None  # (número da linha, mensagem) do último erro
         self.resultado = None  # O que a função "conferir" devolveu quando deu certo
         self.tempo_do_cursor = 0.0
+        self.bloqueado = False  # True = o teclado não escreve (o tutorial está digitando)
+        self.dica = "# ENTER = rodar   Shift+ENTER = nova linha   ESC = fechar"  # Linha de ajuda embaixo do código (o tutorial troca)
 
     # MÉTODOS
 
@@ -48,7 +51,7 @@ class EditorDeScript:
         self.tempo_do_cursor += tempo_real
 
     def tratar_evento(self, evento):
-        if self.somente_leitura:
+        if self.somente_leitura or self.bloqueado:
             return
         linha = self.linhas[self.linha_do_cursor]
         coluna = self.coluna_do_cursor
@@ -148,7 +151,8 @@ class EditorDeScript:
             numero = painel.fonte.render(str(indice + 1).rjust(2), True, COR_DO_NUMERO_DA_LINHA)  # ".rjust(2)" alinha os números à direita
             monitor.blit(numero, (esquerda, y))
             if texto_da_linha.strip().startswith("#"):  # Comentário: tudo verde
-                monitor.blit(painel.fonte.render(texto_da_linha, True, COR_DO_COMENTARIO), (esquerda_do_codigo, y))
+                cor = COR_DO_DESTAQUE if "Digite:" in texto_da_linha else COR_DO_COMENTARIO  # A linha "Digite:" do tutorial em amarelo
+                monitor.blit(painel.fonte.render(texto_da_linha, True, cor), (esquerda_do_codigo, y))
             else:
                 painel.escrever_colorido(monitor, texto_da_linha, esquerda_do_codigo, y)
             if not self.somente_leitura and indice == self.linha_do_cursor and self.tempo_do_cursor % 1.0 < 0.5:  # Cursor piscando
@@ -168,11 +172,11 @@ class EditorDeScript:
         if self.erro:
             for linha_do_erro in self.erro[1].split("\n"):
                 if linha_do_erro.startswith("# "):
-                    pedacos.append((linha_do_erro, COR_DA_DICA))
+                    pedacos.append((linha_do_erro, COR_DO_DESTAQUE))
                 else:
                     pedacos.append((f"linha {self.erro[0]}: {linha_do_erro}", COR_DO_ERRO))
-        elif not self.somente_leitura:
-            pedacos.append(("# ENTER = rodar   Shift+ENTER = nova linha   ESC = fechar", COR_DA_DICA))
+        elif not self.somente_leitura and self.dica:
+            pedacos.append((self.dica, COR_DA_DICA))
         if self.rodape:
             pedacos.extend(self.rodape())
         letras_por_linha = (painel.retangulo.width - 2 * painel.margem) // painel.fonte.size("a")[0]
