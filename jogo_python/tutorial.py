@@ -8,6 +8,7 @@
 #   "conferir" -> (opcional) FUNÇÃO que recebe a linha digitada e diz se está certa (True/False)
 #   "exemplo"  -> (opcional) a linha certa, mostrada na dica quando o visitante erra
 #   "rodar"    -> (opcional) True = o passo termina quando o visitante aperta ENTER numa linha vazia e o script roda sem erro
+#   "recuo"    -> (opcional) espaços que já vêm escritos na linha do visitante (as linhas de dentro de um if ou for)
 
 import pygame  # Biblioteca de jogos que estamos usando
 
@@ -50,12 +51,13 @@ class TutorialDigitado:
         self.editor.dica = "# (o professor está digitando...)"
 
     # Abre uma linha nova no fim do script para o professor (ou o visitante) escrever.
-    def comecar_linha_nova(self):
+    def comecar_linha_nova(self, recuo=""):
         linhas = self.editor.linhas
         if linhas[-1].strip():  # A última linha tem texto: cria outra embaixo
             linhas.append("")
+        linhas[-1] = recuo
         self.editor.linha_do_cursor = len(linhas) - 1
-        self.editor.coluna_do_cursor = 0
+        self.editor.coluna_do_cursor = len(recuo)
         self.letras_escritas = 0.0
 
     def atualizar(self, tempo):
@@ -67,7 +69,7 @@ class TutorialDigitado:
             if not self.linhas_para_escrever:  # Terminou de falar: agora é a vez do visitante (ou do próximo passo)
                 passo = self.passo_atual()
                 if passo.get("conferir") or passo.get("rodar"):
-                    self.comecar_linha_nova()
+                    self.comecar_linha_nova(passo.get("recuo", ""))
                     self.estado = "esperando"
                     self.editor.bloqueado = False
                     self.editor.dica = "# Aperte ENTER numa linha vazia para RODAR o script." if passo.get("rodar") else "# Sua vez! Digite a linha e aperte ENTER."

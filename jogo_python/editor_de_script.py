@@ -1,7 +1,8 @@
 # CLASSE EDITOR DE SCRIPT
 # Um editor de VÁRIAS linhas, com números de linha, para o script das armas do Modo Nave.
 #   ENTER          -> roda o script
-#   Shift + ENTER  -> cria uma linha nova
+#   Shift + ENTER  -> cria uma linha nova (com o mesmo recuo; +4 espaços depois de ":")
+#   TAB            -> 4 espaços
 #   setas, Home, End, Backspace, Delete -> como num editor de texto
 # Ele tem o mesmo método "desenhar(monitor, painel, topo)" do EditorDeCodigo, então o Painel desenha
 # qualquer um dos dois sem saber qual é (POLIMORFISMO).
@@ -67,13 +68,19 @@ class EditorDeScript:
         elif evento.type == pygame.KEYDOWN:
             if evento.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 if evento.mod & pygame.KMOD_SHIFT:  # Shift + ENTER: quebra a linha em duas
+                    recuo = " " * (len(linha) - len(linha.lstrip()))  # A linha nova começa com os mesmos espaços...
+                    if linha[:coluna].rstrip().endswith(":"):  # ...e mais 4 depois de um "if ...:" ou "for ...:"
+                        recuo += "    "
                     self.linhas[self.linha_do_cursor] = linha[:coluna]
-                    self.linhas.insert(self.linha_do_cursor + 1, linha[coluna:])
+                    self.linhas.insert(self.linha_do_cursor + 1, recuo + linha[coluna:].lstrip())
                     self.linha_do_cursor += 1
-                    self.coluna_do_cursor = 0
+                    self.coluna_do_cursor = len(recuo)
                 else:  # ENTER: roda o script
                     self.rodar()
                     return
+            elif evento.key == pygame.K_TAB:  # TAB: 4 espaços (o recuo do if e do for)
+                self.linhas[self.linha_do_cursor] = linha[:coluna] + "    " + linha[coluna:]
+                self.coluna_do_cursor += 4
             elif evento.key == pygame.K_BACKSPACE:
                 if coluna > 0:  # Apaga a letra antes do cursor
                     self.linhas[self.linha_do_cursor] = linha[:coluna - 1] + linha[coluna:]
