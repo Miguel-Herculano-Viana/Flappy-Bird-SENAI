@@ -25,7 +25,7 @@ from armas import criar_todas_as_armas  # As quatro armas
 from avisos import Aviso  # Pop-ups por cima do jogo
 from editor_de_script import EditorDeScript  # O editor de várias linhas
 from imagens import carregar_quadros  # Sprites do Modo Nave
-from inimigos import Atirador, Batedor, ChefeAmarelo, ChefeVerde, ChefeVermelho, Coracao, Explosao, Tanque  # Os inimigos
+from inimigos import Atirador, Batedor, ChefeAmarelo, ChefeVerde, ChefeVermelho, Coracao, Explosao, Metralhador, Perseguidor, Tanque  # Os inimigos
 from script_das_armas import conferir_script, resumo_do_orcamento  # Validação segura do script
 from tutorial import TutorialDigitado  # O "professor" que digita as explicações ao vivo
 
@@ -36,9 +36,9 @@ SEGUNDOS_INVENCIVEL = 2.0  # Depois de levar dano, o pássaro pisca e não leva 
 VELOCIDADE_DO_FUNDO = 20  # O céu rola devagar para dar a sensação de voo
 NIVEIS_QUE_DESBLOQUEIAM_ARMAS = (2, 5, 8)  # Nestes níveis o visitante escolhe uma arma nova
 SEGUNDOS_ATE_CADA_CHEFE = (75, 165, 270)  # Tempo de jogo (sem contar as lutas) até cada chefe aparecer
-INTERVALO_DAS_ONDAS_NO_COMECO = 3.5  # Segundos entre uma onda de inimigos e outra no começo...
-INTERVALO_DAS_ONDAS_NO_FIM = 2.0  # ...e perto do chefe final
-CUSTO_DE_CADA_INIMIGO = {"batedores": 2, "atirador": 3, "tanque": 6}  # Quanto cada um gasta da "verba de ameaça" de cada onda
+INTERVALO_DAS_ONDAS_NO_COMECO = 3.0  # Segundos entre uma onda de inimigos e outra no começo...
+INTERVALO_DAS_ONDAS_NO_FIM = 1.4  # ...e perto do chefe final (mais apertado = mais difícil)
+CUSTO_DE_CADA_INIMIGO = {"batedores": 2, "perseguidor": 3, "atirador": 3, "metralhador": 5, "tanque": 6}  # Quanto cada um gasta da "verba de ameaça" de cada onda
 SEGUNDOS_DA_CHEGADA = 1.6  # Duração da entrada da nave na cena do começo
 SEGUNDOS_ENTRE_CANOS_EXPLODINDO = 0.18
 SEGUNDOS_DA_FUGA = 1.6
@@ -261,16 +261,18 @@ class ModoNave:
         if self.espera_da_onda <= 0:
             progresso = min(1.0, self.relogio_dos_chefes / SEGUNDOS_ATE_CADA_CHEFE[-1])  # De 0 (começo) até 1 (chefe final)
             self.espera_da_onda = INTERVALO_DAS_ONDAS_NO_COMECO + (INTERVALO_DAS_ONDAS_NO_FIM - INTERVALO_DAS_ONDAS_NO_COMECO) * progresso
-            self.criar_onda(verba=2 + self.relogio_dos_chefes / 20 + self.nivel * 0.5)
+            self.criar_onda(verba=2.5 + self.relogio_dos_chefes / 16 + self.nivel * 0.7)
 
     # Gasta a "verba de ameaça" sorteando inimigos. Verba maior = onda mais difícil.
     def criar_onda(self, verba):
-        multiplicador_de_vida = 1 + self.relogio_dos_chefes / 200  # Com o tempo, os inimigos aguentam mais
+        multiplicador_de_vida = 1 + self.relogio_dos_chefes / 160  # Com o tempo, os inimigos aguentam mais
         x = self.area_do_ceu.right + 16
         while True:
             opcoes = [tipo for tipo, custo in CUSTO_DE_CADA_INIMIGO.items() if custo <= verba]
-            if self.relogio_dos_chefes < 10 and "atirador" in opcoes:  # Bem no começo, só batedores
+            if self.relogio_dos_chefes < 10 and "atirador" in opcoes:  # Bem no começo, só batedores e perseguidores
                 opcoes.remove("atirador")
+            if self.relogio_dos_chefes < 16 and "metralhador" in opcoes:
+                opcoes.remove("metralhador")
             if self.relogio_dos_chefes < 40 and "tanque" in opcoes:
                 opcoes.remove("tanque")
             if not opcoes:
@@ -281,9 +283,14 @@ class ModoNave:
             if tipo == "batedores":  # Uma fila de 3 batedores
                 for numero in range(3):
                     self.inimigos.add(Batedor((x + numero * 22, y), multiplicador_de_vida))
+            elif tipo == "perseguidor":
+                self.inimigos.add(Perseguidor((x, y), multiplicador_de_vida))
             elif tipo == "atirador":
                 x_de_parada = random.uniform(self.area_livre.right * 0.55, self.area_livre.right - 20)
                 self.inimigos.add(Atirador((x, y), x_de_parada, multiplicador_de_vida))
+            elif tipo == "metralhador":
+                x_de_parada = random.uniform(self.area_livre.right * 0.55, self.area_livre.right - 20)
+                self.inimigos.add(Metralhador((x, y), x_de_parada, multiplicador_de_vida))
             else:
                 self.inimigos.add(Tanque((x, y), multiplicador_de_vida))
             x += 40

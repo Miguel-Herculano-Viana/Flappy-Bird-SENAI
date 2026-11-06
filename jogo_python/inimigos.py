@@ -180,6 +180,46 @@ class Atirador(Inimigo):
         return 2.4
 
 
+# PERSEGUIDOR: pequeno e rápido, igual o Batedor, mas MIRA na altura do pássaro em vez de só ondular.
+# Sprite: Kenney "Space Shooter Redux" (CC0), veja src/assets/nave/licencas.
+class Perseguidor(Inimigo):
+
+    def __init__(self, posicao, multiplicador_de_vida=1.0):
+        super().__init__(posicao, "perseguidor", 16, 4 * multiplicador_de_vida, xp=2, explosao=("explosao_pequena", 16))
+
+    def mover(self, tempo, passaro, area_do_jogo):
+        self.posicao.x -= 95 * tempo  # Mais rápido que o Batedor
+        self.posicao.y += (passaro.rect.centery - self.posicao.y) * min(1.0, 2.0 * tempo)  # Persegue a altura do pássaro
+
+
+# METRALHADOR: para no lado direito, igual o Atirador, mas dispara RAJADAS rápidas em vez de um tiro de cada vez.
+# Sprite: Kenney "Space Shooter Redux" (CC0), veja src/assets/nave/licencas.
+class Metralhador(Inimigo):
+
+    def __init__(self, posicao, x_de_parada, multiplicador_de_vida=1.0):
+        super().__init__(posicao, "metralhador", 32, 10 * multiplicador_de_vida, xp=4, explosao=("explosao_media", 32))
+        self.x_de_parada = x_de_parada
+        self.altura_base = posicao[1]
+        self.tiros_que_faltam_na_rajada = 0
+
+    def mover(self, tempo, passaro, area_do_jogo):
+        if self.posicao.x > self.x_de_parada:
+            self.posicao.x -= 70 * tempo
+        else:
+            self.posicao.y = self.altura_base + 14 * math.sin(self.idade * 3)
+            if self.idade > 12:
+                self.posicao.x -= 40 * tempo
+
+    def atirar(self, passaro, tiros_inimigos):
+        direcao = mirar(self.ponto_de_tiro(), passaro.rect.center, VELOCIDADE_DOS_TIROS_INIMIGOS)
+        tiros_inimigos.add(TiroInimigo(self.ponto_de_tiro(), direcao.rotate(random.uniform(-6, 6))))  # Mira com um pouco de erro
+        if self.tiros_que_faltam_na_rajada <= 0:  # Começa (ou recomeça) uma rajada de 3 tiros
+            self.tiros_que_faltam_na_rajada = 2
+            return 1.6  # Pausa entre rajadas
+        self.tiros_que_faltam_na_rajada -= 1
+        return 0.22  # Tiros rápidos dentro da mesma rajada
+
+
 # TANQUE: grande e lento, aguenta muito e atira em leque.
 class Tanque(Inimigo):
 
