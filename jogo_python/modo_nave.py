@@ -21,7 +21,8 @@ import textwrap  # Quebra textos compridos em várias linhas (nas cartas)
 
 import pygame  # Biblioteca de jogos que estamos usando
 
-from armas import criar_todas_as_armas  # As quatro armas
+from armas import RaioLaser, criar_todas_as_armas  # As quatro armas (e o raio, que acerta de um jeito diferente)
+from poderes import PODERES, aplicar_poderes, executar_regras  # Os poderes do tiro e as regras (if/for) do script
 from avisos import Aviso  # Pop-ups por cima do jogo
 from editor_de_script import EditorDeScript  # O editor de várias linhas
 from imagens import carregar_quadros  # Sprites do Modo Nave
@@ -35,6 +36,7 @@ VIDAS_DO_PASSARO = 5  # Corações
 SEGUNDOS_INVENCIVEL = 2.0  # Depois de levar dano, o pássaro pisca e não leva dano de novo
 VELOCIDADE_DO_FUNDO = 20  # O céu rola devagar para dar a sensação de voo
 NIVEIS_QUE_DESBLOQUEIAM_ARMAS = (2, 5, 8)  # Nestes níveis o visitante escolhe uma arma nova
+NIVEIS_QUE_DESBLOQUEIAM_PODERES = (3, 4, 6, 7, 9)  # Nestes, além de subir os limites, escolhe um poder (que libera if, for...)
 SEGUNDOS_ATE_CADA_CHEFE = (75, 165, 270)  # Tempo de jogo (sem contar as lutas) até cada chefe aparecer
 INTERVALO_DAS_ONDAS_NO_COMECO = 3.0  # Segundos entre uma onda de inimigos e outra no começo...
 INTERVALO_DAS_ONDAS_NO_FIM = 1.4  # ...e perto do chefe final (mais apertado = mais difícil)
@@ -86,6 +88,8 @@ class ModoNave:
         self.armas = criar_todas_as_armas()  # Dicionário: nome -> Arma
         self.desbloqueadas = ["blaster"]  # LISTA das armas que o visitante já ganhou
         self.equipadas = ["blaster"]  # LISTA das armas que estão atirando (no máximo 2)
+        self.poderes = []  # LISTA dos poderes que o visitante já ganhou
+        self.regras = []  # Os blocos if/for/tiro.poder() do script que rodou por último
         self.script = ""  # O script começa VAZIO: quem escreve é o visitante, com a ajuda do tutorial
         self.tutorial = None  # O tutorial digitado que está acontecendo (ou None)
         self.tutorial_obrigatorio = False  # True = o ESC não fecha (o visitante precisa terminar)
@@ -214,17 +218,37 @@ class ModoNave:
         self.deslocamento_do_fundo += VELOCIDADE_DO_FUNDO * tempo
         self.chao.update(tempo)
         for nome in self.equipadas:  # POLIMORFISMO: cada arma atira do seu jeito
-            self.armas[nome].atualizar(tempo, self.passaro, self.inimigos, self.projeteis, self.area_do_ceu)
+            arma = self.armas[nome]
+            antes = set(self.projeteis)
+            arma.atualizar(tempo, self.passaro, self.inimigos, self.projeteis, self.area_do_ceu)
+            for tiro in [tiro for tiro in self.projeteis if tiro not in antes]:  # Os tiros (e raios) que acabaram de sair
+                tiro.numero = arma.disparos
+                tiro.inimigos = self.inimigos
+                self.usar_poderes(tiro, "disparo")
         self.diretor_de_ondas(tempo)
 
         self.inimigos.update(tempo, self.passaro, self.tiros_inimigos, self.area_do_ceu)
         self.tiros_inimigos.update(tempo, self.area_do_ceu)
         self.projeteis.update(tempo, self.area_do_ceu)
+        for tiro in [tiro for tiro in self.projeteis if getattr(tiro, "na_parede", False)]:  # Evento "parede": quica (se o script pediu) ou some
+            tiro.bater_na_parede(self.area_do_ceu)
+            self.usar_poderes(tiro, "parede")
+            tiro.depois_da_parede()
         self.efeitos.update(tempo)
         self.coracoes.update(tempo, self.area_do_ceu)
 
         # COLISÕES: tiros do pássaro x inimigos ("groupcollide" devolve um dicionário: projétil -> lista de inimigos que ele tocou)
         for projetil, atingidos in pygame.sprite.groupcollide(self.projeteis, self.inimigos, False, False).items():
+            atingidos = [inimigo for inimigo in atingidos if inimigo is not getattr(projetil, "ignorar", None)]  # O que acabou de levar o tiro não conta de novo
+            if not atingidos:
+                continue
+            if isinstance(projetil, RaioLaser):  # O raio atravessa: o evento "acerto" acontece uma vez em cada inimigo novo
+                for alvo in atingidos:
+                    if alvo not in projetil.tocados:
+                        projetil.tocados.add(alvo)
+                        self.soltar_faisca(projetil, alvo)
+            else:  # As regras com "tiro.acertou" rodam agora
+                self.usar_poderes(projetil, "acerto", atingidos[0])
             projetil.acertou(atingidos, self.inimigos, tempo, self.efeitos)  # POLIMORFISMO: tiro, míssil e laser acertam de jeitos diferentes
         for inimigo in list(self.inimigos):
             if inimigo.vida <= 0:
@@ -249,6 +273,28 @@ class ModoNave:
 
         if self.etapa == "jogando" and self.xp >= self.xp_necessario():
             self.subir_de_nivel()
+
+    # Roda as regras do script para um tiro ("disparo" = acabou de sair, "acerto" = encostou em "alvo") e aplica os poderes pedidos.
+    def usar_poderes(self, tiro, momento, alvo=None):
+        if self.regras:
+            aplicar_poderes(tiro, self.pedidos_do_script(tiro, momento, alvo), self.projeteis, self.passaro.rect.center, ignorar=alvo)
+
+    def pedidos_do_script(self, tiro, momento, alvo=None):
+        variaveis = {"tiro.numero": tiro.numero, "tiro.quiques": tiro.quiques, "passaro.vida": self.vidas, "inimigo.vida": round(alvo.vida) if alvo else 0}
+        return executar_regras(self.regras, momento, variaveis)
+
+    # O raio acertou um inimigo novo: se o script pediu algum poder, ele sai numa faísca (um tiro) de dentro do inimigo.
+    def soltar_faisca(self, raio, alvo):
+        if not self.regras:
+            return
+        faisca = raio.faisca(alvo)
+        pedidos = self.pedidos_do_script(faisca, "acerto", alvo)
+        if not pedidos:
+            return
+        aplicar_poderes(faisca, pedidos, self.projeteis, self.passaro.rect.center, ignorar=alvo)
+        if faisca.quiques_restantes > 0:  # Quicar: a faísca já sai na direção do próximo inimigo
+            faisca.quicar(alvo, self.inimigos)
+        self.projeteis.add(faisca)
 
     # O "DIRETOR": decide quando vem cada onda de inimigos e quando vem cada chefe.
     def diretor_de_ondas(self, tempo):
@@ -365,12 +411,24 @@ class ModoNave:
             mudancas.append(f"{nome} {antes}->{arma.limite}")
             self.script = re.sub(rf"^# Limite do {nome}: .*$", f"# Limite do {nome}: {arma.texto_do_limite()}", self.script, flags=re.MULTILINE)  # Atualiza o comentário no script
         self.avisos.append(Aviso("LIMITES: " + ", ".join(mudancas), COR_DE_INFORMACAO, segundos=4.0))
+        poderes_bloqueados = [nome for nome in PODERES if nome not in self.poderes]
+        if self.nivel in NIVEIS_QUE_DESBLOQUEIAM_PODERES and poderes_bloqueados:  # Hora de escolher um poder novo
+            self.cartas = random.sample(poderes_bloqueados, min(3, len(poderes_bloqueados)))
+            self.carta_escolhida = 0
+            self.mudar_de_etapa("cartas")
+            return
         self.abrir_editor([{"falar": [f"{PREFIXO_DO_PROFESSOR}NÍVEL {self.nivel}! Os limites aumentaram:"]
                                      + [f"{PREFIXO_DO_PROFESSOR}  {nome}: {self.armas[nome].texto_do_limite()}" for nome in self.desbloqueadas]
                                      + [f"{PREFIXO_DO_PROFESSOR}Aumente os números e aperte ENTER para rodar."]}])
 
     def escolher_carta(self):
         nome = self.cartas[self.carta_escolhida]
+        if nome in PODERES:
+            self.poderes.append(nome)
+            self.cartas = []
+            self.avisos.append(Aviso(f"NOVO PODER: {PODERES[nome].titulo}!", COR_DO_ACERTO, segundos=3.0))
+            self.abrir_editor(self.passos_do_poder(nome), obrigatorio=True)
+            return
         arma = self.armas[nome]
         self.desbloqueadas.append(nome)
         self.cartas = []
@@ -421,7 +479,25 @@ class ModoNave:
         passos.append({"falar": [f"{p}REGRA do {nome}: {arma.texto_do_limite()}", f"{p}Aperte ENTER na linha vazia para RODAR."], "rodar": True})
         return passos
 
+    # Poder novo: o professor explica o que ele libera e o visitante digita o exemplo, linha por linha (as de dentro já vêm com o recuo).
+    def passos_do_poder(self, nome):
+        p = PREFIXO_DO_PROFESSOR
+        poder = PODERES[nome]
+        passos = []
+        for numero, linha in enumerate(poder.exemplo):
+            recuo = linha[:len(linha) - len(linha.lstrip())]
+            falas = [p + fala for fala in poder.explicacao] if numero == 0 else [f"{p}As linhas de DENTRO têm 4 espaços na frente (já coloquei)."]
+            passos.append({"falar": falas + [f"{p}Digite:   {linha.strip()}"], "conferir": self.conferir_linha(linha), "exemplo": linha.strip(), "recuo": recuo})
+        passos.append({"falar": [p + fala for fala in poder.resultado] + [f"{p}Aperte ENTER na linha vazia para RODAR."], "rodar": True})
+        return passos
+
     # FUNÇÕES QUE DEVOLVEM FUNÇÕES: cada uma cria um "conferidor" para um passo do tutorial.
+    def conferir_linha(self, esperada):  # Confere uma linha de if/for (que não dá para ler sozinha com o ast): mesmo recuo e mesmo texto, sem contar espaços
+        def conferir(linha):
+            mesmo_recuo = len(linha) - len(linha.lstrip()) == len(esperada) - len(esperada.lstrip())
+            return mesmo_recuo and "".join(linha.split()) == "".join(esperada.split())
+        return conferir
+
     def conferir_lista(self, nome_que_precisa_ter):
         def conferir(linha):
             comando = ler_atribuicao(linha)
@@ -441,14 +517,20 @@ class ModoNave:
     def armas_desbloqueadas(self):
         return {nome: self.armas[nome] for nome in self.desbloqueadas}
 
+    def liberados(self):  # Os poderes e tudo o que eles desbloquearam (if, for, tiro.acertou...)
+        return set(self.poderes) | {palavra for nome in self.poderes for palavra in PODERES[nome].libera}
+
     def conferir(self, texto):
-        return conferir_script(texto, self.armas_desbloqueadas(), self.equipadas)
+        return conferir_script(texto, self.armas_desbloqueadas(), self.equipadas, self.liberados())
 
     # Linhas embaixo do editor: a conta de cada limite, ao vivo, verde se cabe e vermelha se passou.
     def rodape_do_editor(self):
         linhas = [("# Limites agora (atualiza enquanto você digita):", COR_DO_COMENTARIO)]
         for _, texto, cabe in resumo_do_orcamento(self.editor.texto(), self.armas_desbloqueadas()):
             linhas.append((("OK  " if cabe else "X   ") + texto, COR_DO_ACERTO if cabe else COR_DO_ALERTA))
+        if self.poderes:
+            liberados = sorted(self.liberados() - set(self.poderes))
+            linhas.append(("# Poderes: " + "  ".join(f"tiro.{nome}()" for nome in self.poderes) + "   Liberado: " + ", ".join(liberados), COR_DE_INFORMACAO))
         return linhas
 
     # O script rodou sem erro: as armas passam a usar os valores novos.
@@ -456,7 +538,8 @@ class ModoNave:
         for nome, valores in configuracao["valores"].items():
             self.armas[nome].valores = dict(valores)
         self.equipadas = configuracao["armas"]
-        self.script = "\n".join(linha for linha in texto.split("\n") if not linha.startswith(PREFIXO_DO_PROFESSOR) and linha.strip())  # Guarda só o código do visitante
+        self.regras = configuracao["regras"]
+        self.script ="\n".join(linha for linha in texto.split("\n") if not linha.startswith(PREFIXO_DO_PROFESSOR) and linha.strip())  # Guarda só o código do visitante
         self.tutorial = None
         for nome in self.equipadas:
             arma = self.armas[nome]
@@ -574,13 +657,13 @@ class ModoNave:
         escurecer = pygame.Surface(livre.size, pygame.SRCALPHA)
         escurecer.fill((0, 0, 0, 120))
         monitor.blit(escurecer, livre)
-        titulo = self.fontes[8].render(f"NÍVEL {self.nivel}! ESCOLHA UMA ARMA NOVA", True, COR_DA_DICA)
+        titulo = self.fontes[8].render(f"NÍVEL {self.nivel}! ESCOLHA " + ("UM PODER NOVO" if self.cartas[0] in PODERES else "UMA ARMA NOVA"), True, COR_DA_DICA)
         monitor.blit(titulo, titulo.get_rect(midtop=(livre.centerx, livre.height * 0.27)))  # Abaixo dos avisos
         largura, altura = round(livre.width * 0.27), round(livre.height * 0.5)
         espaco = round(livre.width * 0.03)
         esquerda = livre.centerx - (len(self.cartas) * largura + (len(self.cartas) - 1) * espaco) // 2
         for numero, nome in enumerate(self.cartas):
-            arma = self.armas[nome]
+            arma = self.armas.get(nome) or PODERES[nome]  # A carta pode ser de arma ou de poder: os dois têm titulo, icone, descricao e rodape_da_carta
             escolhida = numero == self.carta_escolhida
             carta = pygame.Rect(esquerda + numero * (largura + espaco), livre.height * 0.34 - (3 * fator if escolhida else 0), largura, altura)  # A escolhida fica um pouco mais alta
             fundo = pygame.Surface(carta.size, pygame.SRCALPHA)
@@ -597,7 +680,7 @@ class ModoNave:
             y += icone.get_height() + 4 * fator
             letras_por_linha = (carta.width - 8 * fator) // self.fontes[5].size("a")[0]  # Quantas letras cabem na largura da carta
             linhas = [(parte, (220, 225, 240)) for linha in arma.descricao for parte in textwrap.wrap(linha, letras_por_linha)]
-            linhas += [("", None)] + [(parte, COR_DE_INFORMACAO) for parte in textwrap.wrap("Limite: " + arma.texto_do_limite(), letras_por_linha)]
+            linhas += [("", None)] + [(parte, COR_DE_INFORMACAO) for parte in textwrap.wrap(arma.rodape_da_carta(), letras_por_linha)]
             for linha, cor in linhas:
                 if cor:
                     monitor.blit(self.fontes[5].render(linha, True, cor), (carta.left + 4 * fator, y))

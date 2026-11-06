@@ -5,6 +5,7 @@
 # Cada arma atira do seu jeito: o método "atirar" é SOBRESCRITO em cada filha (POLIMORFISMO).
 
 import math  # Ferramenta do Python com contas (ângulos, raiz quadrada)
+import random  # Ferramenta do Python para sortear números
 
 import pygame  # Biblioteca de jogos que estamos usando
 
@@ -13,7 +14,8 @@ from inimigos import Explosao  # A explosão do míssil
 
 VELOCIDADE_DO_TIRO = 320  # Pixels por segundo dos tiros do pássaro
 VELOCIDADE_DO_MISSIL = 150  # Os mísseis são mais lentos, mas fazem curva
-CURVA_DO_MISSIL = 4.0  # Quão rápido o míssil vira na direção do alvo
+CURVA_DE_QUEM_SEGUE = 4.0  # Quão rápido o míssil (e o tiro com tiro.seguir()) vira na direção do alvo
+FRACAO_DO_DANO_DA_COPIA = 0.5  # Os tiros criados por dividir e multiplicar têm metade do dano
 DANO_DO_MISSIL = 4  # Dano no inimigo atingido em cheio
 DANO_DA_EXPLOSAO_DO_MISSIL = 5  # Dano em todos que estiverem dentro do raio da explosão
 DANO_DO_LASER_POR_SEGUNDO = 10  # Por pixel de grossura, enquanto o raio encosta no inimigo
@@ -25,56 +27,124 @@ COR_DO_MIOLO_DO_LASER = (240, 255, 255)  # Quase branco
 
 
 # CLASSE PROJÉTIL: um tiro do pássaro. Anda em linha reta, tira vida do primeiro inimigo que encostar e some.
+# Os PODERES (poderes.py) mudam os atributos dele: quiques_restantes, seguindo, e criam cópias com "copiar".
 class Projetil(pygame.sprite.Sprite):
 
     def __init__(self, imagem, x, y, velocidade_x, velocidade_y, dano, alcance=None):
         super().__init__()
+        self.imagem_original = imagem
         self.image = imagem
         self.rect = imagem.get_rect(center=(round(x), round(y)))
         self.posicao = pygame.Vector2(x, y)  # VETOR: guarda x e y juntos, com casas decimais
         self.velocidade = pygame.Vector2(velocidade_x, velocidade_y)
+        self.rapidez = self.velocidade.length()  # O tamanho da velocidade (não muda quando o tiro faz curva)
         self.dano = dano
         self.alcance = alcance  # Distância máxima (None = até sair da tela)
         self.distancia_percorrida = 0.0
+        # Atributos dos poderes
+        self.numero = 0  # Qual tiro da arma é este (1, 2, 3...): o tiro.numero do script
+        self.quiques = 0  # Quantas vezes já quicou
+        self.quiques_restantes = 0  # Quantas vezes ainda vai quicar
+        self.seguindo = False  # True = faz curva atrás do inimigo mais perto
+        self.inimigos = None  # O grupo de inimigos (para seguir e quicar)
+        self.ignorar = None  # O inimigo que acabou de acertar (para não acertar de novo logo em seguida)
+        self.geracao = 0  # 0 = saiu da arma; 1 = cópia; 2 = cópia da cópia
+        self.na_parede = False
 
     def update(self, tempo, area_do_jogo):
+        if self.seguindo and self.inimigos:  # Procura o inimigo mais perto e vira um pouco na direção dele
+            alvo = min(self.inimigos, key=lambda inimigo: self.posicao.distance_to(inimigo.rect.center), default=None)
+            ate_o_alvo = pygame.Vector2(alvo.rect.center) - self.posicao if alvo else pygame.Vector2()
+            if ate_o_alvo.length() > 0:  # (um vetor de tamanho zero não tem direção)
+                direcao_desejada = ate_o_alvo.normalize() * self.rapidez  # Para onde ele quer ir
+                self.velocidade += (direcao_desejada - self.velocidade) * min(1.0, CURVA_DE_QUEM_SEGUE * tempo)  # Vira aos poucos
+        angulo = math.degrees(math.atan2(-self.velocidade.y, self.velocidade.x))  # Ângulo da velocidade (em graus)
+        self.image = pygame.transform.rotate(self.imagem_original, angulo) if angulo else self.imagem_original  # O desenho aponta para onde o tiro vai
         passo = self.velocidade * tempo  # Quanto anda neste quadro
         self.posicao += passo
         self.distancia_percorrida += passo.length()  # ".length()" é o tamanho do vetor (o teorema de Pitágoras)
         self.rect.center = (round(self.posicao.x), round(self.posicao.y))
         if self.alcance and self.distancia_percorrida > self.alcance:  # Passou do alcance
             self.kill()
-        if not area_do_jogo.colliderect(self.rect):  # Saiu da tela
+        self.na_parede = not area_do_jogo.collidepoint(self.posicao)  # Bateu na borda: o ModoNave roda o evento "parede" e decide se some ou quica
+
+    # Volta para dentro da tela e espelha a velocidade (as cópias criadas na parede já saem para dentro).
+    def bater_na_parede(self, area_do_jogo):
+        if not area_do_jogo.left <= self.posicao.x <= area_do_jogo.right:
+            self.velocidade.x = -self.velocidade.x
+        if not area_do_jogo.top <= self.posicao.y <= area_do_jogo.bottom:
+            self.velocidade.y = -self.velocidade.y
+        self.posicao.x = max(area_do_jogo.left, min(self.posicao.x, area_do_jogo.right))
+        self.posicao.y = max(area_do_jogo.top, min(self.posicao.y, area_do_jogo.bottom))
+        self.ignorar = None  # Depois da parede, pode acertar o mesmo inimigo de novo
+
+    def depois_da_parede(self):  # Tem quique sobrando: continua (já espelhado). Senão, some.
+        if self.quiques_restantes > 0:
+            self.quiques_restantes -= 1
+            self.quiques += 1
+        else:
             self.kill()
 
     # Chamado quando o projétil encosta em inimigos. Cada tipo de projétil faz o seu (POLIMORFISMO).
     def acertou(self, inimigos_atingidos, todos_os_inimigos, tempo, efeitos):
-        inimigos_atingidos[0].levar_dano(self.dano)  # Tira vida do primeiro
-        self.kill()  # E some
+        alvo = inimigos_atingidos[0]
+        alvo.levar_dano(self.dano)  # Tira vida do primeiro
+        if self.quiques_restantes > 0:  # Poder QUICAR: em vez de sumir, vai atrás de outro inimigo
+            self.quicar(alvo, todos_os_inimigos)
+        else:
+            self.kill()  # E some
+
+    def quicar(self, alvo, todos_os_inimigos):
+        self.quiques_restantes -= 1
+        self.quiques += 1
+        self.ignorar = alvo
+        outros = [inimigo for inimigo in todos_os_inimigos if inimigo is not alvo and inimigo.vida > 0]
+        proximo = min(outros, key=lambda inimigo: self.posicao.distance_to(inimigo.rect.center), default=None)
+        ate_o_proximo = pygame.Vector2(proximo.rect.center) - self.posicao if proximo else pygame.Vector2()
+        if ate_o_proximo.length() > 0:
+            self.velocidade = ate_o_proximo.normalize() * self.rapidez
+        else:  # Ninguém por perto: quica de volta, meio torto
+            self.velocidade = pygame.Vector2(-self.velocidade.x, self.velocidade.y).rotate(random.uniform(-30, 30))
+
+    # Uma cópia deste tiro, virada "angulo" graus e afastada "deslocamento" pixels para o lado.
+    def copiar(self, angulo=0, deslocamento=0):
+        alcance = max(1, self.alcance - self.distancia_percorrida) if self.alcance else None
+        return self.herdar(Projetil(self.imagem_original, self.posicao.x, self.posicao.y, 0, 0, self.dano, alcance), angulo, deslocamento)
+
+    # Poder REPETIR: uma cópia que sai de novo do pássaro ("origem"), reto para a direita. A "vez" afasta uma repetição da outra.
+    def repetir(self, origem, vez=1):
+        copia = self.copiar()
+        copia.posicao = pygame.Vector2(origem) - (10 * vez, 0)
+        copia.velocidade = pygame.Vector2(self.rapidez, 0)
+        copia.distancia_percorrida = 0.0
+        copia.alcance = self.alcance
+        copia.ignorar = None
+        copia.rect.center = (round(copia.posicao.x), round(copia.posicao.y))
+        return copia
+
+    def herdar(self, copia, angulo, deslocamento):
+        copia.posicao += self.velocidade.rotate(90).normalize() * deslocamento  # "Para o lado" = 90 graus da direção do tiro
+        copia.velocidade = self.velocidade.rotate(angulo)
+        copia.rapidez = self.rapidez
+        copia.dano = self.dano * FRACAO_DO_DANO_DA_COPIA
+        copia.numero, copia.quiques, copia.quiques_restantes = self.numero, self.quiques, self.quiques_restantes
+        copia.seguindo, copia.inimigos, copia.ignorar = self.seguindo, self.inimigos, self.ignorar
+        copia.geracao = self.geracao + 1
+        copia.rect.center = (round(copia.posicao.x), round(copia.posicao.y))
+        return copia
 
 
 # MÍSSIL: um projétil que faz curva atrás do inimigo mais perto e explode, machucando quem estiver em volta.
 class ProjetilMissil(Projetil):
 
     def __init__(self, x, y, raio_da_explosao, velocidade_y):
-        self.imagem_original = carregar_quadros("missil", 16)[0]
-        super().__init__(self.imagem_original, x, y, VELOCIDADE_DO_MISSIL, velocidade_y, DANO_DO_MISSIL)
+        super().__init__(carregar_quadros("missil", 16)[0], x, y, VELOCIDADE_DO_MISSIL, velocidade_y, DANO_DO_MISSIL)
+        self.rapidez = VELOCIDADE_DO_MISSIL
         self.raio_da_explosao = raio_da_explosao
-        self.inimigos = None  # O grupo de inimigos, para procurar um alvo (recebido em "seguir")
+        self.seguindo = True  # O míssil sempre segue
 
-    def seguir(self, inimigos):
-        self.inimigos = inimigos
-
-    def update(self, tempo, area_do_jogo):
-        if self.inimigos:  # Procura o inimigo mais perto e vira um pouco na direção dele
-            alvo = min(self.inimigos, key=lambda inimigo: self.posicao.distance_to(inimigo.rect.center), default=None)
-            ate_o_alvo = pygame.Vector2(alvo.rect.center) - self.posicao if alvo else pygame.Vector2()
-            if ate_o_alvo.length() > 0:  # (um vetor de tamanho zero não tem direção)
-                direcao_desejada = ate_o_alvo.normalize() * VELOCIDADE_DO_MISSIL  # Para onde ele quer ir
-                self.velocidade += (direcao_desejada - self.velocidade) * min(1.0, CURVA_DO_MISSIL * tempo)  # Vira aos poucos
-        angulo = math.degrees(math.atan2(-self.velocidade.y, self.velocidade.x))  # Ângulo da velocidade (em graus)
-        self.image = pygame.transform.rotate(self.imagem_original, angulo)  # O desenho aponta para onde o míssil vai
-        super().update(tempo, area_do_jogo)
+    def copiar(self, angulo=0, deslocamento=0):
+        return self.herdar(ProjetilMissil(self.posicao.x, self.posicao.y, self.raio_da_explosao, 0), angulo, deslocamento)
 
     # SOBRESCRITA: em vez de só machucar um, explode e machuca todos dentro do raio.
     def acertou(self, inimigos_atingidos, todos_os_inimigos, tempo, efeitos):
@@ -87,13 +157,25 @@ class ProjetilMissil(Projetil):
 
 
 # RAIO LASER: uma faixa de luz que sai do pássaro até o fim da tela, atravessa tudo e machuca enquanto encosta.
+# Com os PODERES: dividir e multiplicar criam raios a mais; ao acertar, os poderes saem numa FAÍSCA (um tiro) do inimigo atingido.
 class RaioLaser(pygame.sprite.Sprite):
 
     def __init__(self, passaro, deslocamento_vertical, grossura, largura_da_tela):
         super().__init__()
         self.passaro = passaro  # O raio acompanha o pássaro
         self.deslocamento_vertical = deslocamento_vertical  # Distância do meio do pássaro (para vários raios lado a lado)
+        self.grossura = grossura
+        self.largura_da_tela = largura_da_tela
         self.dano_por_segundo = DANO_DO_LASER_POR_SEGUNDO * grossura  # Raio mais grosso machuca mais
+        # Atributos dos poderes (os mesmos nomes do Projetil, para os poderes funcionarem nos dois)
+        self.numero = 0
+        self.quiques = 0
+        self.quiques_restantes = 0
+        self.seguindo = False
+        self.inimigos = None
+        self.geracao = 0
+        self.ignorar = None
+        self.tocados = set()  # Inimigos que este raio já tocou (o evento "acertou" acontece uma vez por inimigo)
         self.idade = 0.0
         self.imagem_cheia = pygame.Surface((largura_da_tela, grossura + 2), pygame.SRCALPHA)
         self.imagem_cheia.fill(COR_DO_LASER)
@@ -116,6 +198,23 @@ class RaioLaser(pygame.sprite.Sprite):
     def acertou(self, inimigos_atingidos, todos_os_inimigos, tempo, efeitos):
         for inimigo in inimigos_atingidos:  # Atravessa: machuca todos que encosta, um pouco a cada quadro
             inimigo.levar_dano(self.dano_por_segundo * tempo)
+
+    # Um raio a mais: o ângulo vira distância para o lado (o raio é sempre reto).
+    def copiar(self, angulo=0, deslocamento=0):
+        copia = RaioLaser(self.passaro, self.deslocamento_vertical + deslocamento + angulo / 3, self.grossura, self.largura_da_tela)
+        copia.dano_por_segundo = self.dano_por_segundo * FRACAO_DO_DANO_DA_COPIA
+        copia.numero, copia.inimigos, copia.geracao = self.numero, self.inimigos, self.geracao + 1
+        return copia
+
+    def repetir(self, origem, vez=1):  # Um pulso novo (o raio já sai do pássaro)
+        return self.copiar()
+
+    # FAÍSCA: o tiro que sai do inimigo atingido pelo raio, para os poderes de acerto (quicar, seguir, dividir...).
+    def faisca(self, alvo):
+        imagem = carregar_quadros("tiro_do_passaro", 16)[0]
+        faisca = Projetil(imagem, alvo.rect.centerx, alvo.rect.centery, VELOCIDADE_DO_TIRO, 0, self.grossura)
+        faisca.numero, faisca.inimigos, faisca.ignorar, faisca.geracao = self.numero, self.inimigos, alvo, self.geracao + 1
+        return faisca
 
 
 # CLASSE ARMA: o "molde" de todas as armas.
@@ -140,8 +239,12 @@ class Arma:
         self.aumento_do_limite = aumento_do_limite
         self.intervalo = intervalo
         self.espera = 0.0  # Quanto falta para o próximo disparo
+        self.disparos = 0  # Quantas vezes já atirou (vira o tiro.numero do script)
 
     # MÉTODOS
+
+    def rodape_da_carta(self):
+        return "Limite: " + self.texto_do_limite()
 
     def nomes_dos_parametros(self):
         return list(self.parametros)  # A lista dos nomes (sempre dois)
@@ -174,6 +277,7 @@ class Arma:
         self.espera -= tempo
         if self.espera <= 0:
             self.espera = max(0.0, self.espera + self.intervalo_atual())  # Começa a contar para o próximo
+            self.disparos += 1
             self.atirar(passaro, inimigos, projeteis, area_do_jogo)
 
     def atirar(self, passaro, inimigos, projeteis, area_do_jogo):  # Cada arma SOBRESCREVE
@@ -229,7 +333,7 @@ class Missil(Arma):
         for numero in range(quantidade):
             velocidade_y = (numero - (quantidade - 1) / 2) * 60  # Saem abertos em leque e depois fazem curva
             missil = ProjetilMissil(passaro.rect.centerx, passaro.rect.centery, self.valores["explosao"], velocidade_y)
-            missil.seguir(inimigos)
+            missil.inimigos = inimigos
             projeteis.add(missil)
 
     def icone(self):
