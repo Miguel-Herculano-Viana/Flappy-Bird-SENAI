@@ -25,6 +25,8 @@ from armas import RaioLaser, criar_todas_as_armas  # As quatro armas (e o raio, 
 from poderes import PODERES, aplicar_poderes, executar_regras  # Os poderes do tiro e as regras (if/for) do script
 from avisos import Aviso  # Pop-ups por cima do jogo
 from editor_de_script import EditorDeScript  # O editor de várias linhas
+from fundo_da_nave import FundoDaNave  # O céu noturno em camadas
+from sprites_das_armas import sprite  # O desenho das armas (na mão do pássaro)
 from imagens import carregar_quadros  # Sprites do Modo Nave
 from inimigos import Atirador, Batedor, ChefeAmarelo, ChefeVerde, ChefeVermelho, Coracao, Explosao, Metralhador, Perseguidor, Tanque  # Os inimigos
 from script_das_armas import conferir_script, resumo_do_orcamento  # Validação segura do script
@@ -34,7 +36,8 @@ from tutorial import TutorialDigitado  # O "professor" que digita as explicaçõ
 VELOCIDADE_DO_PASSARO = 130  # Pixels por segundo
 VIDAS_DO_PASSARO = 5  # Corações
 SEGUNDOS_INVENCIVEL = 2.0  # Depois de levar dano, o pássaro pisca e não leva dano de novo
-VELOCIDADE_DO_FUNDO = 20  # O céu rola devagar para dar a sensação de voo
+VELOCIDADE_DO_FUNDO = 40  # O céu rola para dar a sensação de voo (cada camada anda uma parte disso)
+SEGUNDOS_PARA_ANOITECER = 4.0  # Na cena do começo, o céu do Flappy vira o céu noturno aos poucos
 NIVEIS_QUE_DESBLOQUEIAM_ARMAS = (2, 5, 8)  # Nestes níveis o visitante escolhe uma arma nova
 NIVEIS_QUE_DESBLOQUEIAM_PODERES = (3, 4, 6, 7, 9)  # Nestes, além de subir os limites, escolhe um poder (que libera if, for...)
 SEGUNDOS_ATE_CADA_CHEFE = (75, 165, 270)  # Tempo de jogo (sem contar as lutas) até cada chefe aparecer
@@ -82,7 +85,8 @@ class ModoNave:
         self.fundo_rolante.fill(pedaco_do_fundo.get_at((0, 0)))
         for esquerda in range(0, self.fundo_rolante.get_width(), self.largura_do_pedaco):
             self.fundo_rolante.blit(pedaco_do_fundo, (esquerda, area_do_ceu.height - pedaco_do_fundo.get_height()))
-        self.deslocamento_do_fundo = 0.0
+        self.fundo = FundoDaNave(area_do_ceu)
+        self.camada_da_noite = pygame.Surface(area_do_ceu.size)  # Só usada enquanto anoitece (para desenhar o céu novo meio transparente)
 
         # Armas e script
         self.armas = criar_todas_as_armas()  # Dicionário: nome -> Arma
@@ -166,6 +170,7 @@ class ModoNave:
     # A cena do começo: a nave chega, explode os canos e foge para o fundo.
     def atualizar_cena(self, tempo):
         self.posicao_do_passaro.y = self.altura_do_passaro_na_cena + 3 * math.sin(self.tempo_total * 3)  # O pássaro fica parado no ar, assustado
+        self.fundo.atualizar(tempo, 0)  # Parado, mas as estrelas piscam
         if self.etapa == "chegada":
             progresso = min(1.0, self.tempo_na_etapa / SEGUNDOS_DA_CHEGADA)
             self.posicao_da_nave_mae = self.comeco_da_nave_mae.lerp(self.parada_da_nave_mae, 1 - (1 - progresso) ** 2)  # Chega freando
@@ -215,7 +220,7 @@ class ModoNave:
         self.passaro.velocidade_vertical = direcao.y * VELOCIDADE_DO_PASSARO  # Para o pássaro inclinar quando sobe ou desce
         self.passaro.rect.center = (round(self.posicao_do_passaro.x), round(self.posicao_do_passaro.y))
 
-        self.deslocamento_do_fundo += VELOCIDADE_DO_FUNDO * tempo
+        self.fundo.atualizar(tempo, VELOCIDADE_DO_FUNDO)
         self.chao.update(tempo)
         for nome in self.equipadas:  # POLIMORFISMO: cada arma atira do seu jeito
             arma = self.armas[nome]
@@ -596,7 +601,14 @@ class ModoNave:
 
     # Desenha o mundo do jogo na tela pequena (pixel art).
     def desenhar(self, tela):
-        tela.blit(self.fundo_rolante, (-round(self.deslocamento_do_fundo % self.largura_do_pedaco), 0))
+        noite = min(1.0, self.tempo_total / SEGUNDOS_PARA_ANOITECER)
+        if noite < 1:  # Anoitecendo: o céu do Flappy embaixo e o céu noturno por cima, cada vez menos transparente
+            tela.blit(self.fundo_rolante, (0, 0))
+            self.fundo.desenhar(self.camada_da_noite)
+            self.camada_da_noite.set_alpha(round(255 * noite))
+            tela.blit(self.camada_da_noite, (0, 0))
+        else:
+            self.fundo.desenhar(tela)
         if self.nave_mae_no_fundo:  # A nave-mãe pequena e meio transparente, esperando no fundo do céu
             imagem = pygame.transform.scale_by(self.quadro_da_nave_mae(), ESCALA_DA_NAVE_NO_FUNDO)
             imagem.set_alpha(TRANSPARENCIA_DA_NAVE_NO_FUNDO)
@@ -616,6 +628,10 @@ class ModoNave:
         piscando = self.segundos_invencivel > 0 and int(self.tempo_total * 12) % 2 == 0  # Invencível: aparece e some
         if self.etapa != "derrota" and not piscando:
             tela.blit(self.passaro.image, self.passaro.rect)
+            if self.nave_mae_no_fundo or self.etapa not in ("chegada", "ataque", "fuga"):  # As armas equipadas: a primeira embaixo, a segunda em cima
+                for numero, nome in enumerate(self.equipadas):
+                    imagem = sprite(nome)
+                    tela.blit(imagem, imagem.get_rect(midleft=(self.passaro.rect.centerx - 2, self.passaro.rect.centery + (4 if numero == 0 else -5))))
         tela.blit(self.chao.image, self.chao.rect)
         coracao = carregar_quadros("coracao", 16)[0]
         for numero in range(self.vidas):  # Corações no canto de cima

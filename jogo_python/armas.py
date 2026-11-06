@@ -11,6 +11,7 @@ import pygame  # Biblioteca de jogos que estamos usando
 
 from imagens import carregar_quadros  # Carrega os sprites do Modo Nave
 from inimigos import Explosao  # A explosão do míssil
+from sprites_das_armas import sprite  # Pixel art das armas e dos tiros
 
 VELOCIDADE_DO_TIRO = 320  # Pixels por segundo dos tiros do pássaro
 VELOCIDADE_DO_MISSIL = 150  # Os mísseis são mais lentos, mas fazem curva
@@ -211,7 +212,7 @@ class RaioLaser(pygame.sprite.Sprite):
 
     # FAÍSCA: o tiro que sai do inimigo atingido pelo raio, para os poderes de acerto (quicar, seguir, dividir...).
     def faisca(self, alvo):
-        imagem = carregar_quadros("tiro_do_passaro", 16)[0]
+        imagem = sprite("tiro_do_blaster")
         faisca = Projetil(imagem, alvo.rect.centerx, alvo.rect.centery, VELOCIDADE_DO_TIRO, 0, self.grossura)
         faisca.numero, faisca.inimigos, faisca.ignorar, faisca.geracao = self.numero, self.inimigos, alvo, self.geracao + 1
         return faisca
@@ -283,8 +284,8 @@ class Arma:
     def atirar(self, passaro, inimigos, projeteis, area_do_jogo):  # Cada arma SOBRESCREVE
         pass
 
-    def icone(self):  # Desenho que aparece na carta de escolha
-        return carregar_quadros("tiro_do_passaro", 16)[0]
+    def icone(self):  # O desenho da arma (na carta e na mão do pássaro), em sprites_das_armas.py
+        return sprite(self.nome)
 
 
 class Blaster(Arma):
@@ -297,7 +298,7 @@ class Blaster(Arma):
         return 1 / self.valores["cadencia"]  # Cadência 4 = um tiro a cada 1/4 de segundo
 
     def atirar(self, passaro, inimigos, projeteis, area_do_jogo):
-        imagem = carregar_quadros("tiro_do_passaro", 16)[0]
+        imagem = sprite("tiro_do_blaster")
         projeteis.add(Projetil(imagem, passaro.rect.centerx + 8, passaro.rect.centery, VELOCIDADE_DO_TIRO, 0, self.valores["dano"]))
 
 
@@ -314,13 +315,6 @@ class Laser(Arma):
             deslocamento = (numero - (quantidade - 1) / 2) * espaco  # Os raios ficam centralizados no pássaro
             projeteis.add(RaioLaser(passaro, deslocamento, grossura, area_do_jogo.width))
 
-    def icone(self):
-        imagem = pygame.Surface((16, 6), pygame.SRCALPHA)
-        imagem.fill(COR_DO_LASER, (0, 0, 16, 2))
-        imagem.fill(COR_DO_MIOLO_DO_LASER, (0, 2, 16, 2))
-        imagem.fill(COR_DO_LASER, (0, 4, 16, 2))
-        return imagem
-
 
 class Missil(Arma):
 
@@ -336,9 +330,6 @@ class Missil(Arma):
             missil.inimigos = inimigos
             projeteis.add(missil)
 
-    def icone(self):
-        return carregar_quadros("missil", 16)[0]
-
 
 class Espalhado(Arma):
 
@@ -348,14 +339,11 @@ class Espalhado(Arma):
 
     def atirar(self, passaro, inimigos, projeteis, area_do_jogo):
         balas = self.valores["balas"]
-        imagem = carregar_quadros("tiro_inimigo", 16)[1]
+        imagem = sprite("bala_do_espalhado")
         for numero in range(balas):
             angulo = 0 if balas == 1 else math.radians(-ABERTURA_DO_ESPALHADO / 2 + ABERTURA_DO_ESPALHADO * numero / (balas - 1))  # Do ângulo de cima até o de baixo
             projeteis.add(Projetil(imagem, passaro.rect.centerx + 6, passaro.rect.centery,
                                    VELOCIDADE_DO_TIRO * math.cos(angulo), VELOCIDADE_DO_TIRO * math.sin(angulo), DANO_DO_ESPALHADO, alcance=self.valores["alcance"]))
-
-    def icone(self):
-        return carregar_quadros("tiro_inimigo", 16)[1]
 
 
 # Cria uma arma de cada tipo. Dicionário: nome no script -> objeto Arma.

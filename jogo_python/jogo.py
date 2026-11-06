@@ -10,6 +10,7 @@ from cano import VELOCIDADE_DO_CENARIO, Cano  # Importa a CLASSE Cano (e a veloc
 from chao import Chao  # Importa a CLASSE Chao do arquivo chao.py
 from desafios import GerenciadorDeDesafios  # Importa a CLASSE que comanda os desafios de código
 from modo_nave import ModoNave  # Importa a CLASSE do Modo Nave (o shooter)
+from pos_processamento import PosProcessamento  # Bloom e vinheta
 from painel import Painel  # Importa a CLASSE Painel do arquivo painel.py
 from passaro import Passaro  # Importa a CLASSE Passaro do arquivo passaro.py
 from placar import CAMINHO_DO_ARQUIVO_DO_RECORDE, CAMINHO_DO_ARQUIVO_DO_RECORDE_DA_NAVE, Placar  # Importa a CLASSE Placar (e onde ficam os recordes)
@@ -61,6 +62,7 @@ TOPO_DO_CHAO = ALTURA_DA_TELA - ALTURA_DO_CHAO  # Altura da tela onde o chão co
 tela = pygame.Surface((LARGURA_DA_TELA, ALTURA_DA_TELA))  # O jogo é desenhado nesta imagem pequena e depois ampliado para o monitor
 jogo_ampliado = pygame.Surface((LARGURA_DA_TELA * fator_de_ampliacao, ALTURA_DA_TELA * fator_de_ampliacao))  # Onde a imagem ampliada é guardada a cada quadro
 area_do_jogo_no_monitor = jogo_ampliado.get_rect()  # O jogo começa no canto de cima do monitor e cobre tudo
+pos_processamento = PosProcessamento(tela.get_size(), monitor.get_size())  # Os efeitos aplicados na imagem pronta
 
 # PAINEL flutuando por cima do jogo, no canto direito, acima do chão (o chão passa por baixo dele)
 margem_no_monitor = MARGEM_DO_PAINEL * fator_de_ampliacao
@@ -237,8 +239,11 @@ while jogo_esta_rodando:  # LAÇO DO JOGO: cada volta é um quadro
         aviso.atualizar(tempo_do_quadro)
     avisos_na_tela[:] = [aviso for aviso in avisos_na_tela if not aviso.acabou()]  # Tira da lista os avisos que já sumiram ("[:]" troca o conteúdo da MESMA lista, que o gerenciador também usa)
 
+    if modo_nave:  # BLOOM só no Modo Nave: no céu escuro, tiros e explosões brilham (no céu claro do Flappy, tudo brilharia)
+        pos_processamento.bloom(tela)
     pygame.transform.scale(tela, jogo_ampliado.get_size(), jogo_ampliado)  # Amplia o jogo pequeno (cada pixel vira um quadrado)
     monitor.blit(jogo_ampliado, (0, 0))  # Cobre o monitor inteiro, apagando o quadro anterior
+    pos_processamento.aplicar_vinheta(monitor)  # Antes dos textos e do painel, que ficam nítidos por cima
     if estado_do_jogo == "jogando":
         gerenciador_de_desafios.desenhar_no_jogo(monitor, area_do_jogo_no_monitor, fator_de_ampliacao, fonte_dos_avisos)  # Destaque do problema, dica de ENTER, prévia
     if modo_nave:
